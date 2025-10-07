@@ -1,0 +1,52 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below if you use Go modules)
+vendor/
+
+# Logs
+*.log
+
+# Environment variables and configuration files
+.env
+.env.*
+*.env.local
+
+# IDE/editor-specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Build output directories
+bin/
+build/
+dist/
+
+# Temporary or cache files
+tmp/
+.cache/
+*.tmp
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Test coverage files
+coverage/
+coverage.txt
+
+# Node modules (if project includes frontend)
+node_modules/

@@ -1,0 +1,135 @@
+{
+  "info": {
+    "name": "Starpi Clone API - Complete",
+    "_postman_id": "d9c3f9b4-5678-1234-9101-abcdef123456",
+    "description": "Complete Postman Collection for Starpi Clone CMS API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth - Register",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type","value": "application/json"}],
+        "url": {"raw": "http://localhost:8080/auth/register","host": ["http://localhost:8080"],"path":["auth","register"]},
+        "body": {"mode":"raw","raw":"{\n    \"name\": \"Test User\",\n    \"email\": \"test@example.com\",\n    \"password\": \"password123\"\n}"}
+      }
+    },
+    {
+      "name": "Auth - Login",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type","value": "application/json"}],
+        "url": {"raw": "http://localhost:8080/auth/login","host": ["http://localhost:8080"],"path":["auth","login"]},
+        "body": {"mode":"raw","raw":"{\n    \"email\": \"test@example.com\",\n    \"password\": \"password123\"\n}"}
+      }
+    },
+    {
+      "name": "Auth - Google Login",
+      "request": {
+        "method": "GET",
+        "url": {"raw": "http://localhost:8080/auth/google/login","host": ["http://localhost:8080"],"path":["auth","google","login"]}
+      }
+    },
+    {
+      "name": "Auth - Google Callback",
+      "request": {
+        "method": "GET",
+        "url": {"raw": "http://localhost:8080/auth/google/callback?code=YOUR_CODE","host": ["http://localhost:8080"],"path":["auth","google","callback"]}
+      }
+    },
+    {
+      "name": "Auth - Refresh Token",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type","value": "application/json"}],
+        "url": {"raw": "http://localhost:8080/auth/refresh","host":["http://localhost:8080"],"path":["auth","refresh"]},
+        "body": {"mode":"raw","raw":"{\n    \"user_id\": 1,\n    \"refresh_token\": \"{{refresh_token}}\"\n}"}
+      }
+    },
+    {
+      "name": "Users - List Users",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "Authorization","value": "Bearer {{access_token}}"}],
+        "url": {"raw": "http://localhost:8080/users","host": ["http://localhost:8080"],"path":["users"]}
+      }
+    },
+    {
+      "name": "Users - Create User",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Authorization","value": "Bearer {{access_token}}"},
+          {"key": "Content-Type","value": "application/json"}
+        ],
+        "url": {"raw": "http://localhost:8080/users","host": ["http://localhost:8080"],"path":["users"]},
+        "body": {"mode":"raw","raw":"{\n    \"name\": \"New User\",\n    \"email\": \"newuser@example.com\",\n    \"password\": \"password123\",\n    \"role_id\": 2\n}"}
+      }
+    },
+    {
+      "name": "Roles - List Roles",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "Authorization","value": "Bearer {{access_token}}"}],
+        "url": {"raw": "http://localhost:8080/roles","host":["http://localhost:8080"],"path":["roles"]}
+      }
+    },
+    {
+      "name": "Roles - Create Role",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Authorization","value": "Bearer {{access_token}}"},
+          {"key": "Content-Type","value": "application/json"}
+        ],
+        "url": {"raw": "http://localhost:8080/roles","host":["http://localhost:8080"],"path":["roles"]},
+        "body": {"mode":"raw","raw":"{\n    \"name\": \"SEO Specialist\",\n    \"description\": \"Can only manage SEO settings\",\n    \"permissions\": [\n        {\"module\": \"SEO\", \"action\": \"update\"}\n    ]\n}"}
+      }
+    },
+    {
+      "name": "ContentTypes - Create ContentType",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Authorization","value": "Bearer {{access_token}}"}],
+        "url": {"raw": "http://localhost:8080/content/types","host":["http://localhost:8080"],"path":["content","types"]},
+        "body":{"mode":"raw","raw":"{\n    \"name\": \"Article\",\n    \"description\": \"Article content type\"\n}"}
+      }
+    },
+    {
+      "name": "ContentTypes - Add Field",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Authorization","value": "Bearer {{access_token}}"}],
+        "url": {"raw": "http://localhost:8080/content/types/1/fields","host":["http://localhost:8080"],"path":["content","types","1","fields"]},
+        "body":{"mode":"raw","raw":"{\n    \"name\": \"title\",\n    \"type\": \"string\",\n    \"required\": true\n}"}
+      }
+    },
+    {
+      "name": "Content - Create Entry",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Authorization","value": "Bearer {{access_token}}"}],
+        "url": {"raw": "http://localhost:8080/content/1/entries","host":["http://localhost:8080"],"path":["content","1","entries"]},
+        "body":{"mode":"raw","raw":"{\n    \"title\": \"Test Article\",\n    \"body\": \"This is test content\",\n    \"slug\": \"test-article\"\n}"}
+      }
+    },
+    {
+      "name": "Content - List Entries",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "Authorization","value": "Bearer {{access_token}}"}],
+        "url": {"raw": "http://localhost:8080/content/1/entries","host":["http://localhost:8080"],"path":["content","1","entries"]}
+      }
+    },
+    {
+      "name": "Media - Upload File",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Authorization","value": "Bearer {{access_token}}"}],
+        "url": {"raw": "http://localhost:8080/media/upload","host":["http://localhost:8080"],"path":["media","upload"]},
+        "body":{"mode":"formdata","formdata":[{"key":"file","type":"file"}]}
+      }
+    }
+  ]
+}
