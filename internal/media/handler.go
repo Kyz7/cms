@@ -17,7 +17,14 @@ import (
 	"github.com/Kyz7/cms/internal/response"
 	"github.com/Kyz7/cms/internal/utils"
 	"github.com/gofiber/fiber/v2"
+	"github.com/microcosm-cc/bluemonday"
 )
+
+var policy = bluemonday.UGCPolicy()
+
+func sanitizeInput(input string) string {
+	return policy.Sanitize(input)
+}
 
 func UploadMediaHandler(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uint)
@@ -238,7 +245,7 @@ func UpdateMediaHandler(c *fiber.Ctx) error {
 	}
 
 	mediaFile.Alt = body.Alt
-	mediaFile.Caption = body.Caption
+	mediaFile.Caption = sanitizeInput(body.Caption)
 	mediaFile.Folder = body.Folder
 
 	if len(body.Tags) > 0 {

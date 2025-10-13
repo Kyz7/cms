@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -16,9 +17,8 @@ var jwtKey []byte
 
 func init() {
 	if err := godotenv.Load(); err != nil {
-
+		log.Default().Println("No .env file found")
 	}
-
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		secret = "test_secret_key_minimum_32_characters_long_for_testing_only"

@@ -8,6 +8,7 @@ import (
 	"github.com/Kyz7/cms/internal/media"
 	"github.com/Kyz7/cms/internal/middleware"
 	"github.com/Kyz7/cms/internal/role"
+	"github.com/Kyz7/cms/internal/search"
 	"github.com/Kyz7/cms/internal/user"
 	"github.com/Kyz7/cms/internal/workflow"
 
@@ -43,7 +44,13 @@ func SetupRoutes(app *fiber.App) {
 		Expiration: 1 * time.Minute,
 	}))
 	authGroup.Post("/register", auth.RegisterHandler)
-	authGroup.Post("/login", auth.LoginHandler)
+	authGroup.Post("/login", limiter.New(limiter.Config{
+		Max:        5,
+		Expiration: 15 * time.Minute,
+		KeyGenerator: func(c *fiber.Ctx) string {
+			return c.IP()
+		},
+	}), auth.LoginHandler)
 	authGroup.Get("/google/login", auth.GoogleLogin)
 	authGroup.Get("/google/callback", auth.GoogleCallback)
 	authGroup.Post("/forgot-password", auth.ForgotPasswordHandler)
@@ -260,4 +267,55 @@ func SetupRoutes(app *fiber.App) {
 	workflowGroup.Get("/content-types/:content_type_id/stats",
 		middleware.PermissionProtected("ContentEntry", "read"),
 		workflow.GetWorkflowStatsHandler)
+
+	// ==========================================
+	// SEARCH & FILTERING
+	// ==========================================
+	searchGroup := app.Group("/search")
+	searchGroup.Use(auth.JWTProtected())
+
+	// Full-text search
+	searchGroup.Get("/entries",
+		middleware.PermissionProtected("ContentEntry", "read"),
+		search.SearchEntriesHandler)
+
+	// Advanced search with filters
+	searchGroup.Post("/advanced",
+		middleware.PermissionProtected("ContentEntry", "read"),
+		search.AdvancedSearchHandler)
+
+	// Search facets for filtering UI
+	searchGroup.Get("/facets",
+		middleware.PermissionProtected("ContentEntry", "read"),
+		search.GetSearchFacetsHandler)
+
+	// Autocomplete
+	searchGroup.Get("/autocomplete",
+		middleware.PermissionProtected("ContentEntry", "read"),
+		search.AutoCompleteHandler)
+
+	// Search by relation
+	searchGroup.Get("/entries/:entry_id/related",
+		middleware.PermissionProtected("ContentEntry", "read"),
+		search.SearchByRelationHandler)
+
+	// Bulk search across multiple content types
+	searchGroup.Post("/bulk",
+		middleware.PermissionProtected("ContentEntry", "read"),
+		search.BulkSearchHandler)
+
+	// Export search results
+	searchGroup.Get("/export",
+		middleware.PermissionProtected("ContentEntry", "read"),
+		search.ExportSearchResultsHandler)
+
+	// Search statistics
+	searchGroup.Get("/stats",
+		middleware.PermissionProtected("ContentEntry", "read"),
+		search.SearchStatsHandler)
+
+	// Search suggestions
+	searchGroup.Get("/suggestions",
+		middleware.PermissionProtected("ContentEntry", "read"),
+		search.SearchSuggestionsHandler)
 }

@@ -16,11 +16,11 @@ import (
 func main() {
 	cfg := config.Load()
 
-	// ========== PRODUCTION SECURITY VALIDATION ==========
 	if err := utils.ValidateJWTSecret(); err != nil {
 		log.Fatal("❌ JWT Configuration Error: ", err)
 	}
 	log.Println("✅ JWT secret validated")
+
 	requiredEnvVars := map[string]string{
 		"DB_HOST":     os.Getenv("DB_HOST"),
 		"DB_NAME":     os.Getenv("DB_NAME"),
@@ -42,16 +42,28 @@ func main() {
 	}
 	database.DB = db
 
+	// Run GORM AutoMigrate first
 	if err := database.Migrate(db); err != nil {
 		log.Fatal("❌ Migration failed: ", err)
 	}
 	log.Println("✅ Database migrated successfully")
+
+	// ========== RUN SQL MIGRATIONS (FOR SEARCH INDEXES) ==========
+	log.Println("🔍 Running SQL migrations for search indexes...")
+	if err := database.RunMigrations(db); err != nil {
+		log.Printf("⚠️  SQL migrations failed: %v", err)
+		log.Println("⚠️  Search features may not work optimally")
+		log.Println("💡 Run migrations manually: psql -U user -d dbname -f migrations/001_add_search_indexes.sql")
+	} else {
+		log.Println("✅ SQL migrations completed successfully")
+	}
 
 	// ========== STORAGE SETUP ==========
 	if err := utils.InitLocalStorage(); err != nil {
 		log.Fatal("❌ Failed to initialize local storage:", err)
 	}
 	log.Println("✅ Local storage initialized at ./uploads/")
+
 	useS3 := os.Getenv("USE_S3")
 	if useS3 == "true" {
 		s3Bucket := os.Getenv("S3_BUCKET")
@@ -62,7 +74,7 @@ func main() {
 			if err := utils.InitS3(s3Bucket, s3Region, cloudfrontURL); err != nil {
 				log.Println("⚠️  S3 initialization failed:", err)
 				log.Println("⚠️  Falling back to local storage")
-				utils.SetStorageMode(true) // Force local mode
+				utils.SetStorageMode(true)
 			} else {
 				log.Println("✅ S3 initialized successfully")
 				log.Printf("☁️  Using S3: %s (region: %s)", s3Bucket, s3Region)
@@ -114,6 +126,7 @@ func main() {
 	log.Printf("📚 API Documentation: %s/health", cfg.ServerAddr)
 	log.Printf("💾 Storage Mode: %s", utils.GetStorageMode())
 	log.Printf("🔐 JWT Authentication: Enabled")
+	log.Printf("🔍 Full-Text Search: Enabled")
 
 	if err := app.Listen(cfg.ServerAddr); err != nil {
 		log.Fatal("❌ Failed to start server:", err)

@@ -51,22 +51,13 @@ func storeState(state string) {
 }
 
 func validateState(state string) bool {
-	stateMutex.RLock()
-	expiry, exists := stateStore[state]
-	stateMutex.RUnlock()
-
-	if !exists || time.Now().After(expiry) {
-		return false
-	}
-
 	stateMutex.Lock()
 	defer stateMutex.Unlock()
 
-	expiry, exists = stateStore[state]
+	expiry, exists := stateStore[state]
 	if !exists || time.Now().After(expiry) {
 		return false
 	}
-
 	delete(stateStore, state)
 	return true
 }

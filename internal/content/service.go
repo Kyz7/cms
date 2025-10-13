@@ -313,8 +313,8 @@ func checkUniqueness(contentTypeID uint, fieldName string, value interface{}, ex
 	jsonValue, _ := json.Marshal(value)
 
 	query := database.DB.Model(&models.ContentEntry{}).
-		Where("content_type_id = ? AND data @> ?", contentTypeID,
-			fmt.Sprintf(`{"%s": %s}`, fieldName, jsonValue))
+		Where("content_type_id = ?", contentTypeID).
+		Where("data->? = ?", fieldName, jsonValue)
 
 	if excludeEntryID != nil {
 		query = query.Where("id != ?", *excludeEntryID)
@@ -389,6 +389,7 @@ func CreateContentEntry(contentTypeID, createdBy uint, data map[string]interface
 		Data:          datatypes.JSON(jsonData),
 		Status:        models.StatusDraft,
 		CreatedBy:     createdBy,
+		UpdatedBy:     createdBy,
 	}
 
 	if err := database.DB.Create(&entry).Error; err != nil {

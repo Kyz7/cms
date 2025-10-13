@@ -103,7 +103,34 @@ func CreateEntryHandler(c *fiber.Ctx) error {
 	allFields := append(ct.Fields, ct.SEOFields...)
 	data := make(map[string]interface{})
 
-	if form, err := c.MultipartForm(); err == nil {
+	contentType := c.Get("Content-Type", "")
+	if strings.Contains(contentType, "application/json") {
+
+		var payload map[string]interface{}
+		if err := c.BodyParser(&payload); err != nil {
+			return response.BadRequest(c, "Invalid JSON payload", err.Error())
+		}
+		for _, field := range allFields {
+			if field.Type == "media" {
+				if mediaID, ok := payload[field.Name+"_media_id"].(float64); ok {
+					var mediaFile models.MediaFile
+					if err := database.DB.First(&mediaFile, uint(mediaID)).Error; err != nil {
+						return response.NotFound(c, "Media for field "+field.Name)
+					}
+					data[field.Name] = mediaFile.URL
+					data[field.Name+"_media_id"] = mediaFile.ID
+				}
+			} else {
+				if val, ok := payload[field.Name]; ok {
+					data[field.Name] = val
+				}
+			}
+		}
+	} else {
+		form, err := c.MultipartForm()
+		if err != nil {
+			return response.BadRequest(c, "Invalid multipart form", err.Error())
+		}
 		for _, field := range allFields {
 			if field.Type == "media" {
 				mediaIDStr := c.FormValue(field.Name + "_media_id")
@@ -118,10 +145,8 @@ func CreateEntryHandler(c *fiber.Ctx) error {
 					if err := database.DB.First(&mediaFile, uint(mediaID)).Error; err != nil {
 						return response.NotFound(c, "Media for field "+field.Name)
 					}
-
 					data[field.Name] = mediaFile.URL
 					data[field.Name+"_media_id"] = mediaFile.ID
-
 				} else {
 					fileHeader, ok := form.File[field.Name]
 					if ok && len(fileHeader) > 0 {

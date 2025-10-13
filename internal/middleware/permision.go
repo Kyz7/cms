@@ -81,6 +81,10 @@ func IsFullAccessRole(user *models.User) bool {
 		return false
 	}
 
+	if user.Role.Name == "admin" {
+		return true
+	}
+
 	requiredPerms := map[string]map[string]bool{
 		"ContentEntry": {"create": false, "read": false, "update": false, "delete": false},
 		"Media":        {"create": false, "read": false, "update": false, "delete": false},
