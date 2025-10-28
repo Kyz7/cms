@@ -24,7 +24,7 @@ func New(db *gorm.DB) *fiber.App {
 	//     Expiration:     1 * time.Hour,
 	// }))
 
-	SetupRoutes(app)
+	SetupRoutes(app, db)
 
 	return app
 }

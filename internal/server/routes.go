@@ -5,10 +5,12 @@ import (
 
 	"github.com/Kyz7/cms/internal/auth"
 	"github.com/Kyz7/cms/internal/content"
+	"github.com/Kyz7/cms/internal/graphql"
 	"github.com/Kyz7/cms/internal/media"
 	"github.com/Kyz7/cms/internal/middleware"
 	"github.com/Kyz7/cms/internal/role"
 	"github.com/Kyz7/cms/internal/search"
+	"github.com/Kyz7/cms/internal/swagger"
 	"github.com/Kyz7/cms/internal/user"
 	"github.com/Kyz7/cms/internal/workflow"
 
@@ -16,9 +18,10 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	"gorm.io/gorm"
 )
 
-func SetupRoutes(app *fiber.App) {
+func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	// Middleware
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
@@ -34,6 +37,27 @@ func SetupRoutes(app *fiber.App) {
 			"message": "CMS API is running",
 		})
 	})
+
+	// ==========================================
+	// SWAGGER DOCUMENTATION
+	// ==========================================
+	// Setup Swagger routes (serves OpenAPI spec and Swagger UI)
+	swagger.SetupSwaggerRoutes(app, "./openapi.yaml")
+
+	// ==========================================
+	// GRAPHQL ROUTES
+	// ==========================================
+	// Initialize GraphQL resolvers
+	graphqlResolvers := graphql.NewResolvers(db)
+
+	// GraphQL endpoint
+	app.Post("/graphql", graphqlResolvers.GraphQLHandler())
+
+	// GraphiQL playground (development only)
+	app.Get("/graphql", graphqlResolvers.GraphiQLHandler())
+
+	// Batch GraphQL endpoint
+	app.Post("/graphql/batch", graphqlResolvers.BatchGraphQLHandler())
 
 	// ==========================================
 	// AUTH ROUTES (No authentication required)
