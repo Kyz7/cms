@@ -16,16 +16,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Helper function to create multipart form with file
 func createMultipartForm(filename string, content []byte, fields map[string]string) (*bytes.Buffer, string) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
-	// Add file
 	part, _ := writer.CreateFormFile("file", filename)
 	part.Write(content)
 
-	// Add additional fields
 	for key, val := range fields {
 		writer.WriteField(key, val)
 	}
@@ -39,7 +36,6 @@ func createMultipartForm(filename string, content []byte, fields map[string]stri
 func TestUploadMediaHandler(t *testing.T) {
 	app := testutils.SetupTestApp(t)
 
-	// Initialize local storage
 	err := utils.InitLocalStorage()
 	assert.NoError(t, err, "Failed to initialize local storage")
 
@@ -64,7 +60,6 @@ func TestUploadMediaHandler(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 201, resp.StatusCode)
 
-		// FIX: Create recorder properly and copy response body
 		rec := httptest.NewRecorder()
 		rec.Code = resp.StatusCode
 		io.Copy(rec.Body, resp.Body)
@@ -75,7 +70,6 @@ func TestUploadMediaHandler(t *testing.T) {
 		assert.True(t, result.Success)
 		assert.Equal(t, "Media uploaded successfully", result.Message)
 
-		// Verify in database
 		var media models.MediaFile
 		database.DB.First(&media)
 		assert.Equal(t, "test.jpg", media.FileName)
@@ -112,7 +106,6 @@ func TestUploadMediaHandler(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 400, resp.StatusCode)
 
-		// FIX THIS:
 		rec := httptest.NewRecorder()
 		rec.Code = resp.StatusCode
 		io.Copy(rec.Body, resp.Body)
@@ -125,7 +118,6 @@ func TestUploadMediaHandler(t *testing.T) {
 	})
 
 	t.Run("Error - File too large (image)", func(t *testing.T) {
-		// Create 11MB file (exceeds 10MB limit for images)
 		largeContent := make([]byte, 11*1024*1024)
 		body, contentType := createMultipartForm("large.jpg", largeContent, map[string]string{})
 
@@ -154,7 +146,6 @@ func TestUploadMediaHandler(t *testing.T) {
 
 		req := httptest.NewRequest("POST", "/media/upload", body)
 		req.Header.Set("Content-Type", contentType)
-		// No token
 
 		resp, err := app.Test(req, -1)
 		assert.NoError(t, err)
@@ -174,7 +165,6 @@ func TestBulkUploadMediaHandler(t *testing.T) {
 		body := &bytes.Buffer{}
 		writer := multipart.NewWriter(body)
 
-		// Add multiple files
 		for i := 1; i <= 3; i++ {
 			part, _ := writer.CreateFormFile("files", fmt.Sprintf("file%d.jpg", i))
 			part.Write([]byte(fmt.Sprintf("content %d", i)))
@@ -224,11 +214,9 @@ func TestBulkUploadMediaHandler(t *testing.T) {
 		body := &bytes.Buffer{}
 		writer := multipart.NewWriter(body)
 
-		// Add valid file
 		part1, _ := writer.CreateFormFile("files", "valid.jpg")
 		part1.Write([]byte("valid content"))
 
-		// Add oversized file
 		part2, _ := writer.CreateFormFile("files", "toolarge.jpg")
 		part2.Write(make([]byte, 11*1024*1024)) // 11MB
 
@@ -262,7 +250,6 @@ func TestListMediaHandler(t *testing.T) {
 	editor := testutils.CreateTestUser(t, database.DB, "editor@test.com", "password", "editor")
 	token := testutils.GetAuthToken(t, editor.ID, editor.Role.Name)
 
-	// Create test media files
 	for i := 1; i <= 15; i++ {
 		database.DB.Create(&models.MediaFile{
 			FileName:   fmt.Sprintf("test%d.jpg", i),
@@ -298,7 +285,6 @@ func TestListMediaHandler(t *testing.T) {
 	})
 
 	t.Run("Success - Filter by type", func(t *testing.T) {
-		// Add video file
 		database.DB.Create(&models.MediaFile{
 			FileName:   "video.mp4",
 			URL:        "/uploads/videos/video.mp4",
@@ -413,7 +399,6 @@ func TestUpdateMediaHandler(t *testing.T) {
 
 		testutils.AssertSuccess(t, resp)
 
-		// Verify updates
 		var updated models.MediaFile
 		database.DB.First(&updated, media.ID)
 		assert.Equal(t, "Updated Alt", updated.Alt)
@@ -479,7 +464,6 @@ func TestDeleteMediaHandler(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 204, resp.Code)
 
-		// Verify deletion
 		var deleted models.MediaFile
 		result := database.DB.First(&deleted, media.ID)
 		assert.Error(t, result.Error)
@@ -517,7 +501,6 @@ func TestSearchMediaHandler(t *testing.T) {
 	editor := testutils.CreateTestUser(t, database.DB, "editor@test.com", "password", "editor")
 	token := testutils.GetAuthToken(t, editor.ID, editor.Role.Name)
 
-	// Create searchable media
 	database.DB.Create(&models.MediaFile{
 		FileName:   "sunset.jpg",
 		URL:        "/uploads/photos/sunset.jpg",
@@ -599,13 +582,11 @@ func TestGetMediaStatsHandler(t *testing.T) {
 	editor := testutils.CreateTestUser(t, database.DB, "editor@test.com", "password", "editor")
 	token := testutils.GetAuthToken(t, editor.ID, editor.Role.Name)
 
-	// Create media files with different types
 	database.DB.Create(&models.MediaFile{FileName: "img1.jpg", URL: "/uploads/photos/img1.jpg", Type: "image/jpeg", Size: 2048, UploadedBy: editor.ID})
 	database.DB.Create(&models.MediaFile{FileName: "img2.png", URL: "/uploads/photos/img2.png", Type: "image/png", Size: 3072, UploadedBy: editor.ID})
 	database.DB.Create(&models.MediaFile{FileName: "vid1.mp4", URL: "/uploads/videos/vid1.mp4", Type: "video/mp4", Size: 10240, UploadedBy: editor.ID})
 	database.DB.Create(&models.MediaFile{FileName: "doc1.pdf", URL: "/uploads/documents/doc1.pdf", Type: "application/pdf", Size: 5120, UploadedBy: editor.ID})
 
-	// Create recent upload (within 24h)
 	recentTime := time.Now().Add(-12 * time.Hour)
 	database.DB.Create(&models.MediaFile{FileName: "recent.jpg", URL: "/uploads/photos/recent.jpg", Type: "image/jpeg", Size: 1024, UploadedBy: editor.ID, CreatedAt: recentTime})
 
@@ -620,26 +601,21 @@ func TestGetMediaStatsHandler(t *testing.T) {
 
 		stats := result.Data.(map[string]interface{})
 
-		// Check total files
 		assert.NotNil(t, stats["total_files"])
 		assert.GreaterOrEqual(t, int(stats["total_files"].(float64)), 5)
 
-		// Check total size
 		assert.NotNil(t, stats["total_size_bytes"])
 		assert.Greater(t, int(stats["total_size_bytes"].(float64)), 0)
 
-		// Check by_type breakdown
 		assert.NotNil(t, stats["by_type"])
 		byType := stats["by_type"].(map[string]interface{})
 		assert.Contains(t, byType, "image")
 		assert.Contains(t, byType, "video")
 		assert.Contains(t, byType, "application")
 
-		// Check recent uploads
 		assert.NotNil(t, stats["recent_uploads_24h"])
 		assert.GreaterOrEqual(t, int(stats["recent_uploads_24h"].(float64)), 1)
 
-		// Check storage mode
 		assert.NotNil(t, stats["storage_mode"])
 		assert.Contains(t, []string{"local", "s3"}, stats["storage_mode"].(string))
 	})
@@ -670,7 +646,6 @@ func TestCreateFolderHandler(t *testing.T) {
 	})
 
 	t.Run("Success - Create nested folder", func(t *testing.T) {
-		// Create parent folder
 		parent := &models.MediaFolder{
 			Name:      "Photos",
 			Path:      "/Photos",
@@ -724,7 +699,6 @@ func TestListFoldersHandler(t *testing.T) {
 	editor := testutils.CreateTestUser(t, database.DB, "editor@test.com", "password", "editor")
 	token := testutils.GetAuthToken(t, editor.ID, editor.Role.Name)
 
-	// Create folder hierarchy
 	root := &models.MediaFolder{Name: "Root", Path: "/Root", CreatedBy: editor.ID}
 	database.DB.Create(root)
 
@@ -735,7 +709,6 @@ func TestListFoldersHandler(t *testing.T) {
 		resp, err := testutils.MakeRequest(app, "GET", "/media/folders", nil, token)
 		assert.NoError(t, err)
 
-		// Debug: print response body
 		t.Logf("Response status: %d", resp.Code)
 		t.Logf("Response body: %s", resp.Body.String())
 
@@ -745,7 +718,6 @@ func TestListFoldersHandler(t *testing.T) {
 		testutils.ParseResponse(t, resp, &result)
 		assert.True(t, result.Success)
 
-		// Check if Data is nil before type assertion
 		if result.Data != nil {
 			folders := result.Data.([]interface{})
 			assert.GreaterOrEqual(t, len(folders), 2)
@@ -761,7 +733,6 @@ func TestListFoldersHandler(t *testing.T) {
 
 		folders := result.Data.([]interface{})
 
-		// Check if parent-child relationship exists
 		hasRoot := false
 		hasChild := false
 
@@ -791,7 +762,6 @@ func TestMediaUploadIntegration(t *testing.T) {
 	token := testutils.GetAuthToken(t, editor.ID, editor.Role.Name)
 
 	t.Run("Complete workflow - Upload, Update, Delete", func(t *testing.T) {
-		// Upload dengan editor
 		body, contentType := createMultipartForm("workflow.jpg", []byte("test content"), map[string]string{
 			"alt": "Initial Alt",
 		})
@@ -814,7 +784,6 @@ func TestMediaUploadIntegration(t *testing.T) {
 		mediaData := uploadResult.Data.(map[string]interface{})
 		mediaID := int(mediaData["id"].(float64))
 
-		// Update dengan editor
 		updateBody := map[string]interface{}{
 			"alt":     "Updated Alt",
 			"caption": "New Caption",
@@ -823,7 +792,6 @@ func TestMediaUploadIntegration(t *testing.T) {
 		resp2, _ := testutils.MakeRequest(app, "PUT", "/media/"+fmt.Sprint(mediaID), updateBody, token)
 		assert.Equal(t, 200, resp2.Code)
 
-		// Verify update
 		resp3, _ := testutils.MakeRequest(app, "GET", "/media/"+fmt.Sprint(mediaID), nil, token)
 		assert.Equal(t, 200, resp3.Code)
 
@@ -832,14 +800,12 @@ func TestMediaUploadIntegration(t *testing.T) {
 		getData := getResult.Data.(map[string]interface{})
 		assert.Equal(t, "Updated Alt", getData["alt"])
 
-		// Delete dengan ADMIN (bukan editor)
 		admin := testutils.CreateTestUser(t, database.DB, "admin-workflow@test.com", "password", "admin")
 		adminToken := testutils.GetAuthToken(t, admin.ID, admin.Role.Name)
 
 		resp4, _ := testutils.MakeRequest(app, "DELETE", "/media/"+fmt.Sprint(mediaID), nil, adminToken)
 		assert.Equal(t, 204, resp4.Code)
 
-		// Verify deletion
 		resp5, _ := testutils.MakeRequest(app, "GET", "/media/"+fmt.Sprint(mediaID), nil, token)
 		assert.Equal(t, 404, resp5.Code)
 	})
@@ -852,7 +818,7 @@ func TestMediaFolderHierarchy(t *testing.T) {
 	token := testutils.GetAuthToken(t, editor.ID, editor.Role.Name)
 
 	t.Run("Create deep folder hierarchy", func(t *testing.T) {
-		// Level 1
+
 		body1 := map[string]interface{}{"name": "Level1"}
 		resp1, _ := testutils.MakeRequest(app, "POST", "/media/folders", body1, token)
 		assert.Equal(t, 201, resp1.Code)
@@ -861,7 +827,6 @@ func TestMediaFolderHierarchy(t *testing.T) {
 		testutils.ParseResponse(t, resp1, &result1)
 		level1ID := int(result1.Data.(map[string]interface{})["id"].(float64))
 
-		// Level 2
 		body2 := map[string]interface{}{
 			"name":      "Level2",
 			"parent_id": level1ID,
@@ -873,7 +838,6 @@ func TestMediaFolderHierarchy(t *testing.T) {
 		testutils.ParseResponse(t, resp2, &result2)
 		assert.Equal(t, "/Level1/Level2", result2.Data.(map[string]interface{})["path"])
 
-		// Level 3
 		level2ID := int(result2.Data.(map[string]interface{})["id"].(float64))
 		body3 := map[string]interface{}{
 			"name":      "Level3",
@@ -897,7 +861,6 @@ func TestMediaPermissions(t *testing.T) {
 	viewer := testutils.CreateTestUser(t, db, "viewer@test.com", "password", "viewer")
 
 	adminToken := testutils.GetAuthToken(t, admin.ID, admin.Role.Name)
-	// editorToken := testutils.GetAuthToken(t, editor.ID, editor.Role.Name) // HAPUS INI
 	viewerToken := testutils.GetAuthToken(t, viewer.ID, viewer.Role.Name)
 
 	media := &models.MediaFile{
@@ -914,7 +877,6 @@ func TestMediaPermissions(t *testing.T) {
 		assert.Equal(t, 204, resp.Code)
 	})
 
-	// TAMBAHKAN media2 DI SINI agar bisa dipakai di test selanjutnya
 	media2 := &models.MediaFile{
 		FileName:   "test2.jpg",
 		URL:        "/uploads/photos/test2.jpg",
@@ -954,7 +916,6 @@ func TestMediaWithTags(t *testing.T) {
 		resp, _ := app.Test(req, -1)
 		assert.Equal(t, 201, resp.StatusCode)
 
-		// Verify tags saved
 		var media models.MediaFile
 		database.DB.Where("file_name = ?", "tagged.jpg").First(&media)
 		assert.NotNil(t, media.Tags)
@@ -985,7 +946,6 @@ func TestMediaStatsByType(t *testing.T) {
 	editor := testutils.CreateTestUser(t, database.DB, "editor@test.com", "password", "editor")
 	token := testutils.GetAuthToken(t, editor.ID, editor.Role.Name)
 
-	// Create diverse media types
 	mediaTypes := []struct {
 		filename string
 		mimeType string
@@ -1020,12 +980,10 @@ func TestMediaStatsByType(t *testing.T) {
 		stats := result.Data.(map[string]interface{})
 		byType := stats["by_type"].(map[string]interface{})
 
-		// Should have 3 images, 2 videos, 2 documents
 		assert.Equal(t, float64(3), byType["image"])
 		assert.Equal(t, float64(2), byType["video"])
 		assert.Equal(t, float64(2), byType["application"])
 
-		// Total size should be sum of all
 		expectedSize := int64(2048 + 3072 + 1024 + 10240 + 15360 + 5120 + 4096)
 		assert.Equal(t, float64(expectedSize), stats["total_size_bytes"])
 	})

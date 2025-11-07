@@ -152,6 +152,19 @@ components:
         content_type_ids: { type: array, items: { type: integer } }
         limit: { type: integer }
         group_by_type: { type: boolean }
+    TranslateEntryRequest:
+      type: object
+      properties:
+        target_lang:
+          type: string
+          description: Target language code (e.g., "en", "id"). If omitted, inferred from Accept-Language header.
+        source_lang:
+          type: string
+          description: Source language code; if omitted, auto-detected by Google Translate.
+        fields:
+          type: array
+          description: Specific fields to translate; if empty or omitted, translates all string fields.
+          items: { type: string }
 
 tags:
   - name: Health
@@ -162,6 +175,7 @@ tags:
   - name: Media
   - name: Workflow
   - name: Search
+  - name: Translation
 
 paths:
   /health:
@@ -563,6 +577,30 @@ paths:
           name: entry_id
           required: true
           schema: { type: integer }
+      responses:
+        '200': { description: OK }
+
+  /content/entries/{entry_id}/translate:
+    post:
+      tags: [Translation]
+      summary: Translate entry fields and store under _i18n[target_lang]
+      description: |
+        Translates selected string fields of an entry to the target language and saves them under the `_i18n[target_lang]` map within the entry data. If `target_lang` is omitted in the body, it will be inferred from the `Accept-Language` header (first language tag, primary subtag).
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema: { type: integer }
+        - in: header
+          name: Accept-Language
+          required: false
+          schema: { type: string }
+          description: Used to infer `target_lang` when not provided in the body.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TranslateEntryRequest' }
       responses:
         '200': { description: OK }
 

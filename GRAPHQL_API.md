@@ -631,6 +631,37 @@ mutation DeleteContentEntry($id: ID!) {
 ```
 
 ## Batch Requests
+## Workflow
+
+New queries and mutations aligned with REST workflow endpoints:
+
+- Queries:
+  - `workflowHistory(entryId: Int!): [WorkflowHistory!]!`
+  - `workflowComments(entryId: Int!, includePrivate: Boolean): [WorkflowComment!]!`
+  - `workflowAssignments(status: String): [WorkflowAssignment!]!`
+  - `workflowStats(contentTypeId: Int!): WorkflowStats!`
+
+- Mutations:
+  - `changeContentStatus(entryId: Int!, status: WorkflowStatus!, comment: String): WorkflowHistory!`
+  - `requestReview(entryId: Int!, comment: String): WorkflowHistory!`
+  - `approveEntry(entryId: Int!, comment: String): WorkflowHistory!`
+  - `rejectEntry(entryId: Int!, comment: String): WorkflowHistory!`
+  - `publishEntry(entryId: Int!, comment: String): WorkflowHistory!`
+  - `addWorkflowComment(entryId: Int!, comment: String!, isPrivate: Boolean): WorkflowComment!`
+  - `assignEntry(entryId: Int!, assignedTo: Int!, dueDate: Time): WorkflowAssignment!`
+
+## Content Fields
+
+Field management parity with REST:
+- `addContentField(...)` to add a field to a content type
+- `updateContentField(id: ID!, ...)` to update a field
+- `deleteContentField(id: ID!)` to remove a field
+
+## SEO & Search
+
+- `seoPreview(entryId: Int!): JSON` returns SEO-related data like slug, meta fields
+- `searchFacets(query: String, contentTypeIds: [Int!]): JSON` returns aggregated facets
+- `autocomplete(field: String!, prefix: String!, contentTypeId: Int!, limit: Int): [String!]!`
 
 You can send multiple queries in a single request using the `/graphql/batch` endpoint:
 

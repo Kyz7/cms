@@ -9,6 +9,7 @@ import (
 	"github.com/Kyz7/cms/internal/middleware"
 	"github.com/Kyz7/cms/internal/models"
 	"github.com/Kyz7/cms/internal/response"
+	"github.com/Kyz7/cms/internal/translation"
 	"github.com/Kyz7/cms/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/datatypes"
@@ -42,6 +43,12 @@ type CreateEntryRequest struct {
 type CreateRelationRequest struct {
 	ToContentID  uint   `json:"to_content_id"`
 	RelationType string `json:"relation_type"`
+}
+
+type TranslateEntryRequest struct {
+	TargetLang string   `json:"target_lang"`
+	SourceLang string   `json:"source_lang"`
+	Fields     []string `json:"fields"`
 }
 
 func CreateContentTypeHandler(c *fiber.Ctx) error {
@@ -537,6 +544,122 @@ func DeleteEntryHandler(c *fiber.Ctx) error {
 	}
 
 	return response.NoContent(c)
+}
+
+func TranslateEntryHandler(c *fiber.Ctx) error {
+	entryID, err := c.ParamsInt("entry_id")
+	if err != nil {
+		return response.BadRequest(c, "Invalid entry ID", nil)
+	}
+
+	userID := c.Locals("user_id").(uint)
+
+	var body TranslateEntryRequest
+	if err := c.BodyParser(&body); err != nil {
+		return response.BadRequest(c, "Invalid request body", err.Error())
+	}
+	if body.TargetLang == "" {
+		al := c.Get("Accept-Language")
+		inferred := inferLangFromAcceptLanguage(al)
+		if inferred == "" {
+			return response.ValidationError(c, map[string]string{"target_lang": "target_lang is required or inferable from Accept-Language"})
+		}
+		body.TargetLang = inferred
+	}
+
+	var entry models.ContentEntry
+	if err := database.DB.First(&entry, entryID).Error; err != nil {
+		return response.NotFound(c, "Entry")
+	}
+
+	data := map[string]interface{}{}
+	if err := json.Unmarshal([]byte(entry.Data), &data); err != nil {
+		return response.InternalError(c, "Failed to parse entry data")
+	}
+
+	includeAll := len(body.Fields) == 0
+	shouldInclude := func(k string) bool {
+		if includeAll {
+			return true
+		}
+		for _, f := range body.Fields {
+			if f == k {
+				return true
+			}
+		}
+		return false
+	}
+
+	texts := []string{}
+	keys := []string{}
+	for k, v := range data {
+		if !shouldInclude(k) {
+			continue
+		}
+		if s, ok := v.(string); ok && s != "" {
+			texts = append(texts, s)
+			keys = append(keys, k)
+		}
+	}
+
+	client, err := translation.NewClient()
+	if err != nil {
+		return response.InternalError(c, err.Error())
+	}
+	translated, err := client.TranslateTexts(texts, body.TargetLang, body.SourceLang)
+	if err != nil {
+		return response.InternalError(c, err.Error())
+	}
+
+	// put into _i18n[targetLang]
+	i18n, _ := data["_i18n"].(map[string]interface{})
+	if i18n == nil {
+		i18n = map[string]interface{}{}
+	}
+	langMap, _ := i18n[body.TargetLang].(map[string]interface{})
+	if langMap == nil {
+		langMap = map[string]interface{}{}
+	}
+	for i, key := range keys {
+		if i < len(translated) {
+			langMap[key] = translated[i]
+		}
+	}
+	i18n[body.TargetLang] = langMap
+	data["_i18n"] = i18n
+
+	buf, err := json.Marshal(data)
+	if err != nil {
+		return response.InternalError(c, "Failed to serialize data")
+	}
+	entry.Data = datatypes.JSON(buf)
+	entry.UpdatedBy = userID
+	if err := database.DB.Save(&entry).Error; err != nil {
+		return response.InternalError(c, "Failed to save translation")
+	}
+
+	return response.Success(c, entry, "Entry translated successfully")
+}
+
+// inferLangFromAcceptLanguage returns the first language tag (lowercased, 2-letter when possible)
+func inferLangFromAcceptLanguage(header string) string {
+	if header == "" {
+		return ""
+	}
+	parts := strings.Split(header, ",")
+	if len(parts) == 0 {
+		return ""
+	}
+	// e.g., "en-US;q=0.9" -> "en"
+	primary := strings.TrimSpace(parts[0])
+	if idx := strings.Index(primary, ";"); idx >= 0 {
+		primary = primary[:idx]
+	}
+	primary = strings.ToLower(primary)
+	if dash := strings.Index(primary, "-"); dash > 0 {
+		return primary[:dash]
+	}
+	return primary
 }
 
 func UpdateContentTypeHandler(c *fiber.Ctx) error {

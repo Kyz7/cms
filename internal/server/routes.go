@@ -166,6 +166,11 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 		middleware.PermissionProtected("ContentEntry", "delete"),
 		content.DeleteEntryHandler)
 
+	// Translation
+	contentGroup.Post("/entries/:entry_id/translate",
+		middleware.PermissionProtected("ContentEntry", "update"),
+		content.TranslateEntryHandler)
+
 	// SEO
 	contentGroup.Get("/entries/:entry_id/seo-preview",
 		middleware.PermissionProtected("SEO", "read"),

@@ -1,6 +1,7 @@
 package graphql
 
 import (
+	"github.com/Kyz7/cms/internal/middleware"
 	"github.com/graphql-go/graphql"
 	"gorm.io/gorm"
 )
@@ -9,14 +10,12 @@ type Resolvers struct {
 	DB *gorm.DB
 }
 
-// NewResolvers creates a new resolvers instance
 func NewResolvers(db *gorm.DB) *Resolvers {
 	return &Resolvers{
 		DB: db,
 	}
 }
 
-// CreateSchema creates the complete GraphQL schema
 func (r *Resolvers) CreateSchema() (graphql.Schema, error) {
 	queryType := graphql.NewObject(graphql.ObjectConfig{
 		Name: "Query",
@@ -96,6 +95,13 @@ func (r *Resolvers) CreateSchema() (graphql.Schema, error) {
 				},
 				Resolve: r.ContentEntryResolver,
 			},
+			"contentRelations": &graphql.Field{
+				Type: graphql.NewList(ContentRelationType),
+				Args: graphql.FieldConfigArgument{
+					"fromContentId": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+				},
+				Resolve: r.ContentRelationsResolver,
+			},
 			"mediaFiles": &graphql.Field{
 				Type: graphql.NewList(MediaFileType),
 				Args: graphql.FieldConfigArgument{
@@ -119,6 +125,108 @@ func (r *Resolvers) CreateSchema() (graphql.Schema, error) {
 					},
 				},
 				Resolve: r.MediaFileResolver,
+			},
+			"mediaFolders": &graphql.Field{
+				Type:    graphql.NewList(MediaFolderType),
+				Resolve: r.MediaFoldersResolver,
+			},
+			"mediaStats": &graphql.Field{
+				Type:    MediaStatsType,
+				Resolve: r.MediaStatsResolver,
+			},
+			"searchEntries": &graphql.Field{
+				Type: SearchResultType,
+				Args: graphql.FieldConfigArgument{
+					"query":          &graphql.ArgumentConfig{Type: graphql.String},
+					"contentTypeIds": &graphql.ArgumentConfig{Type: graphql.NewList(graphql.Int)},
+					"fields":         &graphql.ArgumentConfig{Type: graphql.NewList(graphql.String)},
+					"status":         &graphql.ArgumentConfig{Type: graphql.String},
+					"createdBy":      &graphql.ArgumentConfig{Type: graphql.Int},
+					"tags":           &graphql.ArgumentConfig{Type: graphql.NewList(graphql.String)},
+					"fromDate":       &graphql.ArgumentConfig{Type: graphql.String},
+					"toDate":         &graphql.ArgumentConfig{Type: graphql.String},
+					"page":           &graphql.ArgumentConfig{Type: graphql.Int},
+					"limit":          &graphql.ArgumentConfig{Type: graphql.Int},
+					"sortBy":         &graphql.ArgumentConfig{Type: graphql.String},
+					"orderBy":        &graphql.ArgumentConfig{Type: graphql.String},
+				},
+				Resolve: r.SearchEntriesResolver,
+			},
+			"advancedSearch": &graphql.Field{
+				Type: SearchResultType,
+				Args: graphql.FieldConfigArgument{
+					"query":          &graphql.ArgumentConfig{Type: graphql.String},
+					"contentTypeIds": &graphql.ArgumentConfig{Type: graphql.NewList(graphql.Int)},
+					"fields":         &graphql.ArgumentConfig{Type: graphql.NewList(graphql.String)},
+					"status":         &graphql.ArgumentConfig{Type: graphql.String},
+					"createdBy":      &graphql.ArgumentConfig{Type: graphql.Int},
+					"tags":           &graphql.ArgumentConfig{Type: graphql.NewList(graphql.String)},
+					"fromDate":       &graphql.ArgumentConfig{Type: graphql.String},
+					"toDate":         &graphql.ArgumentConfig{Type: graphql.String},
+					"page":           &graphql.ArgumentConfig{Type: graphql.Int},
+					"limit":          &graphql.ArgumentConfig{Type: graphql.Int},
+					"sortBy":         &graphql.ArgumentConfig{Type: graphql.String},
+					"orderBy":        &graphql.ArgumentConfig{Type: graphql.String},
+					"filters":        &graphql.ArgumentConfig{Type: JSONType},
+				},
+				Resolve: r.AdvancedSearchResolver,
+			},
+			// Workflow Queries
+			"workflowHistory": &graphql.Field{
+				Type: graphql.NewList(WorkflowHistoryType),
+				Args: graphql.FieldConfigArgument{
+					"entryId": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+				},
+				Resolve: r.WorkflowHistoryResolver,
+			},
+			"workflowComments": &graphql.Field{
+				Type: graphql.NewList(WorkflowCommentType),
+				Args: graphql.FieldConfigArgument{
+					"entryId":        &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+					"includePrivate": &graphql.ArgumentConfig{Type: graphql.Boolean},
+				},
+				Resolve: r.WorkflowCommentsResolver,
+			},
+			"workflowAssignments": &graphql.Field{
+				Type: graphql.NewList(WorkflowAssignmentType),
+				Args: graphql.FieldConfigArgument{
+					"status": &graphql.ArgumentConfig{Type: graphql.String},
+				},
+				Resolve: r.WorkflowAssignmentsResolver,
+			},
+			"workflowStats": &graphql.Field{
+				Type: WorkflowStatsType,
+				Args: graphql.FieldConfigArgument{
+					"contentTypeId": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+				},
+				Resolve: r.WorkflowStatsResolver,
+			},
+			// SEO preview
+			"seoPreview": &graphql.Field{
+				Type: JSONType,
+				Args: graphql.FieldConfigArgument{
+					"entryId": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+				},
+				Resolve: r.SEOPreviewResolver,
+			},
+			// Search facets & autocomplete
+			"searchFacets": &graphql.Field{
+				Type: JSONType,
+				Args: graphql.FieldConfigArgument{
+					"query":          &graphql.ArgumentConfig{Type: graphql.String},
+					"contentTypeIds": &graphql.ArgumentConfig{Type: graphql.NewList(graphql.Int)},
+				},
+				Resolve: r.SearchFacetsResolver,
+			},
+			"autocomplete": &graphql.Field{
+				Type: graphql.NewList(graphql.String),
+				Args: graphql.FieldConfigArgument{
+					"field":         &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+					"prefix":        &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+					"contentTypeId": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+					"limit":         &graphql.ArgumentConfig{Type: graphql.Int},
+				},
+				Resolve: r.AutocompleteResolver,
 			},
 		},
 	})
@@ -240,6 +348,22 @@ func (r *Resolvers) CreateSchema() (graphql.Schema, error) {
 				},
 				Resolve: r.DeleteRoleResolver,
 			},
+			"duplicateRole": &graphql.Field{
+				Type: RoleType,
+				Args: graphql.FieldConfigArgument{
+					"id":   &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.ID)},
+					"name": &graphql.ArgumentConfig{Type: graphql.String},
+				},
+				Resolve: r.DuplicateRoleResolver,
+			},
+			"assignRoleToUser": &graphql.Field{
+				Type: graphql.Boolean,
+				Args: graphql.FieldConfigArgument{
+					"userId": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.ID)},
+					"roleId": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.ID)},
+				},
+				Resolve: r.AssignRoleToUserResolver,
+			},
 			"createContentType": &graphql.Field{
 				Type: ContentTypeType,
 				Args: graphql.FieldConfigArgument{
@@ -318,6 +442,156 @@ func (r *Resolvers) CreateSchema() (graphql.Schema, error) {
 				},
 				Resolve: r.DeleteContentEntryResolver,
 			},
+			"translateContentEntry": &graphql.Field{
+				Type: ContentEntryType,
+				Args: graphql.FieldConfigArgument{
+					"id": &graphql.ArgumentConfig{
+						Type: graphql.NewNonNull(graphql.ID),
+					},
+					"targetLang": &graphql.ArgumentConfig{
+						Type: graphql.NewNonNull(graphql.String),
+					},
+					"sourceLang": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+					"fields": &graphql.ArgumentConfig{
+						Type: graphql.NewList(graphql.String),
+					},
+				},
+				Resolve: r.TranslateContentEntryResolver,
+			},
+			"createContentRelation": &graphql.Field{
+				Type: ContentRelationType,
+				Args: graphql.FieldConfigArgument{
+					"fromContentId": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.ID)},
+					"toContentId":   &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+					"relationType":  &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+				},
+				Resolve: r.CreateContentRelationResolver,
+			},
+			"deleteContentRelation": &graphql.Field{
+				Type: graphql.Boolean,
+				Args: graphql.FieldConfigArgument{
+					"id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.ID)},
+				},
+				Resolve: r.DeleteContentRelationResolver,
+			},
+			"createMediaFolder": &graphql.Field{
+				Type: MediaFolderType,
+				Args: graphql.FieldConfigArgument{
+					"name":     &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+					"parentId": &graphql.ArgumentConfig{Type: graphql.Int},
+				},
+				Resolve: r.CreateMediaFolderResolver,
+			},
+			// Content Fields
+			"addContentField": &graphql.Field{
+				Type: ContentFieldType,
+				Args: graphql.FieldConfigArgument{
+					"contentTypeId": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+					"name":          &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+					"type":          &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+					"required":      &graphql.ArgumentConfig{Type: graphql.Boolean},
+					"isSeo":         &graphql.ArgumentConfig{Type: graphql.Boolean},
+					"unique":        &graphql.ArgumentConfig{Type: graphql.Boolean},
+					"maxLength":     &graphql.ArgumentConfig{Type: graphql.Int},
+					"minLength":     &graphql.ArgumentConfig{Type: graphql.Int},
+					"pattern":       &graphql.ArgumentConfig{Type: graphql.String},
+					"minValue":      &graphql.ArgumentConfig{Type: graphql.Float},
+					"maxValue":      &graphql.ArgumentConfig{Type: graphql.Float},
+					"defaultValue":  &graphql.ArgumentConfig{Type: graphql.String},
+					"placeholder":   &graphql.ArgumentConfig{Type: graphql.String},
+					"helpText":      &graphql.ArgumentConfig{Type: graphql.String},
+				},
+				Resolve: r.AddContentFieldResolver,
+			},
+			"updateContentField": &graphql.Field{
+				Type: ContentFieldType,
+				Args: graphql.FieldConfigArgument{
+					"id":           &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.ID)},
+					"name":         &graphql.ArgumentConfig{Type: graphql.String},
+					"type":         &graphql.ArgumentConfig{Type: graphql.String},
+					"required":     &graphql.ArgumentConfig{Type: graphql.Boolean},
+					"isSeo":        &graphql.ArgumentConfig{Type: graphql.Boolean},
+					"unique":       &graphql.ArgumentConfig{Type: graphql.Boolean},
+					"maxLength":    &graphql.ArgumentConfig{Type: graphql.Int},
+					"minLength":    &graphql.ArgumentConfig{Type: graphql.Int},
+					"pattern":      &graphql.ArgumentConfig{Type: graphql.String},
+					"minValue":     &graphql.ArgumentConfig{Type: graphql.Float},
+					"maxValue":     &graphql.ArgumentConfig{Type: graphql.Float},
+					"defaultValue": &graphql.ArgumentConfig{Type: graphql.String},
+					"placeholder":  &graphql.ArgumentConfig{Type: graphql.String},
+					"helpText":     &graphql.ArgumentConfig{Type: graphql.String},
+				},
+				Resolve: r.UpdateContentFieldResolver,
+			},
+			"deleteContentField": &graphql.Field{
+				Type: graphql.Boolean,
+				Args: graphql.FieldConfigArgument{
+					"id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.ID)},
+				},
+				Resolve: r.DeleteContentFieldResolver,
+			},
+			// Workflow Mutations
+			"changeContentStatus": &graphql.Field{
+				Type: WorkflowHistoryType,
+				Args: graphql.FieldConfigArgument{
+					"entryId": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+					"status":  &graphql.ArgumentConfig{Type: graphql.NewNonNull(WorkflowStatusEnum)},
+					"comment": &graphql.ArgumentConfig{Type: graphql.String},
+				},
+				Resolve: r.ChangeContentStatusResolver,
+			},
+			"requestReview": &graphql.Field{
+				Type: WorkflowHistoryType,
+				Args: graphql.FieldConfigArgument{
+					"entryId": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+					"comment": &graphql.ArgumentConfig{Type: graphql.String},
+				},
+				Resolve: r.RequestReviewResolver,
+			},
+			"approveEntry": &graphql.Field{
+				Type: WorkflowHistoryType,
+				Args: graphql.FieldConfigArgument{
+					"entryId": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+					"comment": &graphql.ArgumentConfig{Type: graphql.String},
+				},
+				Resolve: r.ApproveEntryResolver,
+			},
+			"rejectEntry": &graphql.Field{
+				Type: WorkflowHistoryType,
+				Args: graphql.FieldConfigArgument{
+					"entryId": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+					"comment": &graphql.ArgumentConfig{Type: graphql.String},
+				},
+				Resolve: r.RejectEntryResolver,
+			},
+			"publishEntry": &graphql.Field{
+				Type: WorkflowHistoryType,
+				Args: graphql.FieldConfigArgument{
+					"entryId": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+					"comment": &graphql.ArgumentConfig{Type: graphql.String},
+				},
+				Resolve: r.PublishEntryResolver,
+			},
+			"addWorkflowComment": &graphql.Field{
+				Type: WorkflowCommentType,
+				Args: graphql.FieldConfigArgument{
+					"entryId":   &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+					"comment":   &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+					"isPrivate": &graphql.ArgumentConfig{Type: graphql.Boolean},
+				},
+				Resolve: r.AddWorkflowCommentResolver,
+			},
+			"assignEntry": &graphql.Field{
+				Type: WorkflowAssignmentType,
+				Args: graphql.FieldConfigArgument{
+					"entryId":    &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+					"assignedTo": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+					"dueDate":    &graphql.ArgumentConfig{Type: TimeType},
+				},
+				Resolve: r.AssignEntryResolver,
+			},
 		},
 	})
 
@@ -329,16 +603,27 @@ func (r *Resolvers) CreateSchema() (graphql.Schema, error) {
 	return schema, err
 }
 
-// Helper function to get user ID from context
 func (r *Resolvers) getUserIDFromContext(p graphql.ResolveParams) (uint, error) {
-	// This should be implemented based on your JWT middleware
-	// For now, return 0 (no user)
+	if p.Context == nil {
+		return 0, nil
+	}
+	if v := p.Context.Value(contextKeyUserID); v != nil {
+		switch id := v.(type) {
+		case uint:
+			return id, nil
+		case int:
+			if id < 0 {
+				return 0, nil
+			}
+			return uint(id), nil
+		}
+	}
 	return 0, nil
 }
 
-// Helper function to check permissions
 func (r *Resolvers) checkPermission(userID uint, module, action string) bool {
-	// This should be implemented based on your permission system
-	// For now, return true (allow all)
-	return true
+	if userID == 0 {
+		return false
+	}
+	return middleware.HasPermission(userID, module, action)
 }

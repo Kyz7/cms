@@ -7,7 +7,6 @@ import (
 	"github.com/graphql-go/graphql"
 )
 
-// Custom scalar types
 var TimeType = graphql.NewScalar(graphql.ScalarConfig{
 	Name:        "Time",
 	Description: "Time scalar type",
@@ -34,7 +33,6 @@ var JSONType = graphql.NewScalar(graphql.ScalarConfig{
 	},
 })
 
-// Enum types
 var WorkflowStatusEnum = graphql.NewEnum(graphql.EnumConfig{
 	Name: "WorkflowStatus",
 	Values: graphql.EnumValueConfigMap{
@@ -74,7 +72,6 @@ var UserStatusEnum = graphql.NewEnum(graphql.EnumConfig{
 	},
 })
 
-// Type definitions
 var UserType = graphql.NewObject(graphql.ObjectConfig{
 	Name: "User",
 	Fields: graphql.Fields{
@@ -300,6 +297,18 @@ var ContentEntryType = graphql.NewObject(graphql.ObjectConfig{
 	},
 })
 
+var ContentRelationType = graphql.NewObject(graphql.ObjectConfig{
+	Name: "ContentRelation",
+	Fields: graphql.Fields{
+		"id":            &graphql.Field{Type: graphql.ID},
+		"fromContentId": &graphql.Field{Type: graphql.Int},
+		"toContentId":   &graphql.Field{Type: graphql.Int},
+		"relationType":  &graphql.Field{Type: graphql.String},
+		"createdAt":     &graphql.Field{Type: TimeType},
+		"updatedAt":     &graphql.Field{Type: TimeType},
+	},
+})
+
 var MediaFileType = graphql.NewObject(graphql.ObjectConfig{
 	Name: "MediaFile",
 	Fields: graphql.Fields{
@@ -351,6 +360,171 @@ var MediaFileType = graphql.NewObject(graphql.ObjectConfig{
 	},
 })
 
+var MediaFolderType = graphql.NewObject(graphql.ObjectConfig{
+	Name: "MediaFolder",
+	Fields: graphql.FieldsThunk(func() graphql.Fields {
+		return graphql.Fields{
+			"id":        &graphql.Field{Type: graphql.ID},
+			"name":      &graphql.Field{Type: graphql.String},
+			"path":      &graphql.Field{Type: graphql.String},
+			"parentId":  &graphql.Field{Type: graphql.Int},
+			"createdBy": &graphql.Field{Type: graphql.Int},
+			"createdAt": &graphql.Field{Type: TimeType},
+			"updatedAt": &graphql.Field{Type: TimeType},
+		}
+	}),
+})
+
+var MediaStatsType = graphql.NewObject(graphql.ObjectConfig{
+	Name: "MediaStats",
+	Fields: graphql.Fields{
+		"totalFiles":    &graphql.Field{Type: graphql.Int},
+		"totalSize":     &graphql.Field{Type: graphql.Int},
+		"byType":        &graphql.Field{Type: JSONType},
+		"recentUploads": &graphql.Field{Type: graphql.Int},
+		"storageMode":   &graphql.Field{Type: graphql.String},
+	},
+})
+
+// Workflow GraphQL Types
+var WorkflowHistoryType = graphql.NewObject(graphql.ObjectConfig{
+	Name: "WorkflowHistory",
+	Fields: graphql.Fields{
+		"id":         &graphql.Field{Type: graphql.ID},
+		"entryId":    &graphql.Field{Type: graphql.Int},
+		"entry":      &graphql.Field{Type: ContentEntryType},
+		"fromStatus": &graphql.Field{Type: WorkflowStatusEnum},
+		"toStatus":   &graphql.Field{Type: WorkflowStatusEnum},
+		"changedBy":  &graphql.Field{Type: graphql.Int},
+		"user":       &graphql.Field{Type: UserType},
+		"comment":    &graphql.Field{Type: graphql.String},
+		"createdAt":  &graphql.Field{Type: TimeType},
+		"updatedAt":  &graphql.Field{Type: TimeType},
+	},
+})
+
+var WorkflowCommentType = graphql.NewObject(graphql.ObjectConfig{
+	Name: "WorkflowComment",
+	Fields: graphql.Fields{
+		"id":        &graphql.Field{Type: graphql.ID},
+		"entryId":   &graphql.Field{Type: graphql.Int},
+		"entry":     &graphql.Field{Type: ContentEntryType},
+		"userId":    &graphql.Field{Type: graphql.Int},
+		"user":      &graphql.Field{Type: UserType},
+		"comment":   &graphql.Field{Type: graphql.String},
+		"isPrivate": &graphql.Field{Type: graphql.Boolean},
+		"createdAt": &graphql.Field{Type: TimeType},
+		"updatedAt": &graphql.Field{Type: TimeType},
+	},
+})
+
+var WorkflowAssignmentType = graphql.NewObject(graphql.ObjectConfig{
+	Name: "WorkflowAssignment",
+	Fields: graphql.Fields{
+		"id":         &graphql.Field{Type: graphql.ID},
+		"entryId":    &graphql.Field{Type: graphql.Int},
+		"entry":      &graphql.Field{Type: ContentEntryType},
+		"assignedTo": &graphql.Field{Type: graphql.Int},
+		"user":       &graphql.Field{Type: UserType},
+		"assignedBy": &graphql.Field{Type: graphql.Int},
+		"assigner":   &graphql.Field{Type: UserType},
+		"status":     &graphql.Field{Type: graphql.String},
+		"dueDate":    &graphql.Field{Type: TimeType},
+		"createdAt":  &graphql.Field{Type: TimeType},
+		"updatedAt":  &graphql.Field{Type: TimeType},
+	},
+})
+
+var WorkflowStatsType = graphql.NewObject(graphql.ObjectConfig{
+	Name: "WorkflowStats",
+	Fields: graphql.Fields{
+		"total":              &graphql.Field{Type: graphql.Int},
+		"draft":              &graphql.Field{Type: graphql.Int},
+		"in_review":          &graphql.Field{Type: graphql.Int},
+		"ready_for_approval": &graphql.Field{Type: graphql.Int},
+		"approved":           &graphql.Field{Type: graphql.Int},
+		"published":          &graphql.Field{Type: graphql.Int},
+		"rejected":           &graphql.Field{Type: graphql.Int},
+	},
+})
+
+// Converters for workflow structs
+func ConvertWorkflowHistoryToGraphQL(h *models.WorkflowHistory) map[string]interface{} {
+	m := map[string]interface{}{
+		"id":         h.ID,
+		"entryId":    h.EntryID,
+		"fromStatus": h.FromStatus,
+		"toStatus":   h.ToStatus,
+		"changedBy":  h.ChangedBy,
+		"comment":    h.Comment,
+		"createdAt":  h.CreatedAt,
+		"updatedAt":  h.UpdatedAt,
+	}
+	if h.User != nil {
+		m["user"] = ConvertUserToGraphQL(h.User)
+	}
+	if h.Entry != nil {
+		m["entry"] = ConvertContentEntryToGraphQL(h.Entry)
+	}
+	return m
+}
+
+func ConvertWorkflowCommentToGraphQL(wc *models.WorkflowComment) map[string]interface{} {
+	m := map[string]interface{}{
+		"id":        wc.ID,
+		"entryId":   wc.EntryID,
+		"userId":    wc.UserID,
+		"comment":   wc.Comment,
+		"isPrivate": wc.IsPrivate,
+		"createdAt": wc.CreatedAt,
+		"updatedAt": wc.UpdatedAt,
+	}
+	if wc.User != nil {
+		m["user"] = ConvertUserToGraphQL(wc.User)
+	}
+	if wc.Entry != nil {
+		m["entry"] = ConvertContentEntryToGraphQL(wc.Entry)
+	}
+	return m
+}
+
+func ConvertWorkflowAssignmentToGraphQL(wa *models.WorkflowAssignment) map[string]interface{} {
+	m := map[string]interface{}{
+		"id":         wa.ID,
+		"entryId":    wa.EntryID,
+		"assignedTo": wa.AssignedTo,
+		"assignedBy": wa.AssignedBy,
+		"status":     wa.Status,
+		"dueDate":    wa.DueDate,
+		"createdAt":  wa.CreatedAt,
+		"updatedAt":  wa.UpdatedAt,
+	}
+	if wa.User != nil {
+		m["user"] = ConvertUserToGraphQL(wa.User)
+	}
+	if wa.Assigner != nil {
+		m["assigner"] = ConvertUserToGraphQL(wa.Assigner)
+	}
+	if wa.Entry != nil {
+		m["entry"] = ConvertContentEntryToGraphQL(wa.Entry)
+	}
+	return m
+}
+
+var SearchResultType = graphql.NewObject(graphql.ObjectConfig{
+	Name: "SearchResult",
+	Fields: graphql.Fields{
+		"entries":         &graphql.Field{Type: graphql.NewList(ContentEntryType)},
+		"total":           &graphql.Field{Type: graphql.Int},
+		"page":            &graphql.Field{Type: graphql.Int},
+		"limit":           &graphql.Field{Type: graphql.Int},
+		"totalPages":      &graphql.Field{Type: graphql.Int},
+		"hasNextPage":     &graphql.Field{Type: graphql.Boolean},
+		"hasPreviousPage": &graphql.Field{Type: graphql.Boolean},
+		"query":           &graphql.Field{Type: graphql.String},
+	},
+})
+
 var AuthPayloadType = graphql.NewObject(graphql.ObjectConfig{
 	Name: "AuthPayload",
 	Fields: graphql.Fields{
@@ -366,7 +540,6 @@ var AuthPayloadType = graphql.NewObject(graphql.ObjectConfig{
 	},
 })
 
-// Helper function to convert models to GraphQL types
 func ConvertUserToGraphQL(user *models.User) map[string]interface{} {
 	result := map[string]interface{}{
 		"id":        user.ID,
@@ -515,4 +688,15 @@ func ConvertMediaFileToGraphQL(media *models.MediaFile) map[string]interface{} {
 	}
 
 	return result
+}
+
+func ConvertContentRelationToGraphQL(rel *models.ContentRelation) map[string]interface{} {
+	return map[string]interface{}{
+		"id":            rel.ID,
+		"fromContentId": rel.FromContentID,
+		"toContentId":   rel.ToContentID,
+		"relationType":  rel.RelationType,
+		"createdAt":     rel.CreatedAt,
+		"updatedAt":     rel.UpdatedAt,
+	}
 }
