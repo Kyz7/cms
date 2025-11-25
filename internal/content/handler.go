@@ -188,17 +188,8 @@ func CreateEntryHandler(c *fiber.Ctx) error {
 		return response.Forbidden(c, err.Error())
 	}
 
-	// Check if user is admin - admin can create entries even with empty data
-	var user models.User
-	if err := database.DB.Preload("Role").First(&user, userID).Error; err == nil {
-		if !middleware.IsFullAccessRole(&user) && len(filteredData) == 0 {
-			return response.Forbidden(c, "No permission to create content with provided fields")
-		}
-	} else {
-		// If we can't load user, fall back to checking length
-		if len(filteredData) == 0 {
-			return response.Forbidden(c, "No permission to create content with provided fields")
-		}
+	if len(filteredData) == 0 {
+		return response.Forbidden(c, "You can't create entries with no data provided")
 	}
 
 	for k, v := range data {
@@ -255,21 +246,10 @@ func CreateEntryHandlerJSON(c *fiber.Ctx) error {
 		return c.Status(403).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	// Check if user is admin - admin can create entries even with empty data
-	var user models.User
-	if err := database.DB.Preload("Role").First(&user, userID).Error; err == nil {
-		if !middleware.IsFullAccessRole(&user) && len(filteredData) == 0 {
-			return c.Status(403).JSON(fiber.Map{
-				"error": "No permission to create content with the provided fields",
-			})
-		}
-	} else {
-		// If we can't load user, fall back to checking length
-		if len(filteredData) == 0 {
-			return c.Status(403).JSON(fiber.Map{
-				"error": "No permission to create content with the provided fields",
-			})
-		}
+	if len(filteredData) == 0 {
+		return c.Status(403).JSON(fiber.Map{
+			"error": "No permission to create content with the provided fields",
+		})
 	}
 	for k, v := range data {
 		if strings.HasSuffix(k, "_media_id") {
