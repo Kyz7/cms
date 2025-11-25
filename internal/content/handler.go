@@ -189,7 +189,7 @@ func CreateEntryHandler(c *fiber.Ctx) error {
 	}
 
 	if len(filteredData) == 0 {
-		return response.Forbidden(c, "You can't create entries with no data provided")
+		return response.BadRequest(c, "No data provided. Please provide at least one field to create an entry", nil)
 	}
 
 	for k, v := range data {
@@ -247,8 +247,8 @@ func CreateEntryHandlerJSON(c *fiber.Ctx) error {
 	}
 
 	if len(filteredData) == 0 {
-		return c.Status(403).JSON(fiber.Map{
-			"error": "No permission to create content with the provided fields",
+		return c.Status(400).JSON(fiber.Map{
+			"error": "No data provided. Please provide at least one field to create an entry",
 		})
 	}
 	for k, v := range data {
@@ -440,7 +440,7 @@ func UpdateEntryHandler(c *fiber.Ctx) error {
 	}
 
 	if len(filteredData) == 0 {
-		return response.Forbidden(c, "No permission to edit provided fields")
+		return response.BadRequest(c, "No valid fields to update. All provided fields were filtered out by permissions or don't exist", nil)
 	}
 
 	for k, v := range data {
