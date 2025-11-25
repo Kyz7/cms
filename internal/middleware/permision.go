@@ -22,6 +22,11 @@ func PermissionProtected(module string, action string) fiber.Handler {
 			return response.Forbidden(c, "User has no role assigned")
 		}
 
+		// Admin bypass - admin has full access to all resources
+		if IsFullAccessRole(&user) {
+			return c.Next()
+		}
+
 		hasPermission := false
 		for _, perm := range user.Role.Permissions {
 			if perm.Module == module && perm.Action == action {
@@ -48,6 +53,11 @@ func HasPermission(userID uint, module, action string) bool {
 		return false
 	}
 
+	// Admin bypass - admin has full access to all resources
+	if IsFullAccessRole(&user) {
+		return true
+	}
+
 	for _, perm := range user.Role.Permissions {
 		if perm.Module == module && perm.Action == action {
 			return true
@@ -64,6 +74,11 @@ func HasAnyPermission(userID uint, permissions []struct{ Module, Action string }
 
 	if user.Role == nil {
 		return false
+	}
+
+	// Admin bypass - admin has full access to all resources
+	if IsFullAccessRole(&user) {
+		return true
 	}
 
 	for _, reqPerm := range permissions {
