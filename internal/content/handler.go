@@ -466,7 +466,6 @@ func UpdateEntryHandler(c *fiber.Ctx) error {
 	}
 
 	entry.Data = datatypes.JSON(jsonData)
-	entry.Status = models.StatusDraft
 	entry.UpdatedBy = userID
 
 	if err := database.DB.Save(&entry).Error; err != nil {

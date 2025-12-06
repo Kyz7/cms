@@ -507,11 +507,27 @@ func TestUpdateEntryHandler(t *testing.T) {
 			"title": "Updated Title",
 		}
 
-		resp, err := testutils.MakeRequest(app, "PUT", "/content/entries/"+fmt.Sprint(entry.ID), body, token)
-		assert.NoError(t, err)
-		assert.Equal(t, 200, resp.Code)
+	resp, err := testutils.MakeRequest(app, "PUT", "/content/entries/"+fmt.Sprint(entry.ID), body, token)
+	assert.NoError(t, err)
+	assert.Equal(t, 200, resp.Code)
 
-		testutils.AssertSuccess(t, resp)
+	testutils.AssertSuccess(t, resp)
+
+	// Preserve status when updating non-draft entry
+	// Set status to in_review
+	entry.Status = models.StatusInReview
+	database.DB.Save(entry)
+
+	body2 := map[string]interface{}{
+		"title": "Updated Title Again",
+	}
+	resp2, err2 := testutils.MakeRequest(app, "PUT", "/content/entries/"+fmt.Sprint(entry.ID), body2, token)
+	assert.NoError(t, err2)
+	assert.Equal(t, 200, resp2.Code)
+	
+	var updated models.ContentEntry
+	database.DB.First(&updated, entry.ID)
+	assert.Equal(t, models.StatusInReview, updated.Status)
 	})
 
 	t.Run("Error - Cannot update published entry", func(t *testing.T) {

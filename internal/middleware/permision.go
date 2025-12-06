@@ -28,6 +28,11 @@ func PermissionProtected(module string, action string) fiber.Handler {
 		}
 
 		hasPermission := false
+
+		if user.Role.Name == "seo_specialist" && module == "ContentEntry" && (action == "update" || action == "read") {
+			hasPermission = true
+		}
+
 		for _, perm := range user.Role.Permissions {
 			if perm.Module == module && perm.Action == action {
 				hasPermission = true

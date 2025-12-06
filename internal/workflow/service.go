@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Kyz7/cms/internal/database"
@@ -24,6 +25,15 @@ func ChangeWorkflowStatus(entryID, userID uint, toStatus string, comment string)
 	if !isValidTransition(entry.Status, targetStatus, user.Role.Name) {
 		return nil, fmt.Errorf("invalid status transition from %s to %s for role %s",
 			entry.Status, targetStatus, user.Role.Name)
+	}
+
+	if entry.Status == models.StatusInReview && targetStatus == models.StatusRejected {
+		role := user.Role.Name
+		if role == "editor" {
+			if strings.TrimSpace(comment) == "" {
+				return nil, fmt.Errorf("comment is required when rejecting from In Review for role editor")
+			}
+		}
 	}
 
 	fromStatus := entry.Status
