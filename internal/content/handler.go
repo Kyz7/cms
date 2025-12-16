@@ -2,22 +2,29 @@ package content
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"mime/multipart"
 	"strconv"
 	"strings"
 
 	"github.com/Kyz7/cms/internal/database"
+	"github.com/Kyz7/cms/internal/globals"
 	"github.com/Kyz7/cms/internal/middleware"
 	"github.com/Kyz7/cms/internal/models"
+	"github.com/Kyz7/cms/internal/project"
 	"github.com/Kyz7/cms/internal/response"
 	"github.com/Kyz7/cms/internal/translation"
 	"github.com/Kyz7/cms/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
 type CreateContentTypeRequest struct {
-	Name string `json:"name"`
-	Slug string `json:"slug"`
+	Name      string `json:"name"`
+	Slug      string `json:"slug"`
+	ProjectID *uint  `json:"project_id,omitempty"`
 }
 
 type AddFieldRequest struct {
@@ -64,7 +71,37 @@ func CreateContentTypeHandler(c *fiber.Ctx) error {
 		})
 	}
 
-	ct, err := CreateContentType(body.Name, body.Slug)
+	userID := c.Locals("user_id").(uint)
+
+	ownerID, ok := globals.GetRoleIDByName(models.ProjectRoleOwner)
+	if !ok {
+		return response.InternalError(c, "Project owner role not found")
+	}
+
+	adminID, ok := globals.GetRoleIDByName(models.ProjectRoleAdmin)
+	if !ok {
+		return response.InternalError(c, "Project admin role not found")
+	}
+
+	editorID, ok := globals.GetRoleIDByName(models.ProjectRoleEditor)
+	if !ok {
+		return response.InternalError(c, "Project editor role not found")
+	}
+
+	// If project_id is provided, verify user is a member
+	if body.ProjectID != nil {
+		projectMember, err := project.GetProjectMember(*body.ProjectID, userID)
+		if err != nil {
+			return response.Forbidden(c, "You are not a member of this project")
+		}
+		// Only owner, admin, and editor can create content types
+		if projectMember.RoleID != ownerID && projectMember.RoleID != adminID && projectMember.RoleID != editorID {
+			return response.Forbidden(c, "Only project owners can create content types")
+		}
+
+	}
+
+	ct, err := CreateContentType(body.Name, body.Slug, body.ProjectID)
 	if err != nil {
 		return response.InternalError(c, "Failed to create content type")
 	}
@@ -99,115 +136,157 @@ func AddFieldHandler(c *fiber.Ctx) error {
 }
 
 func CreateEntryHandler(c *fiber.Ctx) error {
-	contentTypeID, _ := c.ParamsInt("content_type_id")
-	userID := c.Locals("user_id").(uint)
+	contentTypeID, err := c.ParamsInt("content_type_id")
+	if err != nil || contentTypeID <= 0 {
+		return response.BadRequest(c, "Invalid Content Type ID", nil)
+	}
 
+	userID := c.Locals("user_id").(uint)
+	ctID := uint(contentTypeID)
+
+	// 1. Ambil Content Type dan Field Terkait
 	var ct models.ContentType
-	if err := database.DB.Preload("Fields").Preload("SEOFields").First(&ct, contentTypeID).Error; err != nil {
-		return response.NotFound(c, "Content type")
+	if err := database.DB.Preload("Fields").Preload("SEOFields").First(&ct, ctID).Error; err != nil {
+		return response.NotFound(c, "Content type not found")
 	}
 
 	allFields := append(ct.Fields, ct.SEOFields...)
 	data := make(map[string]interface{})
 
+	// 2. Parse Payload (JSON atau Multipart Form)
 	contentType := c.Get("Content-Type", "")
-	if strings.Contains(contentType, "application/json") {
 
+	if strings.Contains(contentType, "application/json") {
+		// --- Parsing JSON ---
 		var payload map[string]interface{}
 		if err := c.BodyParser(&payload); err != nil {
 			return response.BadRequest(c, "Invalid JSON payload", err.Error())
 		}
-		for _, field := range allFields {
-			if field.Type == "media" {
-				if mediaID, ok := payload[field.Name+"_media_id"].(float64); ok {
-					var mediaFile models.MediaFile
-					if err := database.DB.First(&mediaFile, uint(mediaID)).Error; err != nil {
-						return response.NotFound(c, "Media for field "+field.Name)
-					}
-					data[field.Name] = mediaFile.URL
-					data[field.Name+"_media_id"] = mediaFile.ID
-				}
-			} else {
-				if val, ok := payload[field.Name]; ok {
-					data[field.Name] = val
-				}
-			}
-		}
-	} else {
+		data = mapJSONToData(payload, allFields, ctID)
+
+	} else if strings.Contains(contentType, "multipart/form-data") {
+		// --- Parsing Multipart Form ---
 		form, err := c.MultipartForm()
 		if err != nil {
 			return response.BadRequest(c, "Invalid multipart form", err.Error())
 		}
-		for _, field := range allFields {
-			if field.Type == "media" {
-				mediaIDStr := c.FormValue(field.Name + "_media_id")
 
-				if mediaIDStr != "" {
-					mediaID, err := strconv.ParseUint(mediaIDStr, 10, 32)
-					if err != nil {
-						return response.BadRequest(c, "Invalid media ID for field "+field.Name, nil)
-					}
-
-					var mediaFile models.MediaFile
-					if err := database.DB.First(&mediaFile, uint(mediaID)).Error; err != nil {
-						return response.NotFound(c, "Media for field "+field.Name)
-					}
-					data[field.Name] = mediaFile.URL
-					data[field.Name+"_media_id"] = mediaFile.ID
-				} else {
-					fileHeader, ok := form.File[field.Name]
-					if ok && len(fileHeader) > 0 {
-						url, err := utils.UploadFile(fileHeader[0])
-						if err != nil {
-							return response.BadRequest(c, "Failed to upload file", err.Error())
-						}
-						mediaFile := models.MediaFile{
-							FileName:   fileHeader[0].Filename,
-							URL:        url,
-							Type:       fileHeader[0].Header.Get("Content-Type"),
-							UploadedBy: userID,
-						}
-
-						if err := database.DB.Create(&mediaFile).Error; err != nil {
-							utils.DeleteFile(url)
-							return response.InternalError(c, "Failed to save media metadata")
-						}
-
-						data[field.Name] = url
-						data[field.Name+"_media_id"] = mediaFile.ID
-					}
-				}
-			} else {
-				data[field.Name] = c.FormValue(field.Name)
-			}
+		var errParse error
+		data, errParse = mapFormToData(c, form, allFields, userID)
+		if errParse != nil {
+			return response.BadRequest(c, errParse.Error(), nil)
 		}
+
+	} else {
+		return response.BadRequest(c, "Unsupported Content-Type", nil)
 	}
 
-	filteredData, err := middleware.FilterFieldsByPermission(userID, "create", data, uint(contentTypeID))
+	// 3. Tentukan ProjectID untuk Otorisasi Filter dan Penyimpanan
+	// Variabel ini akan digunakan untuk FilterFieldsByPermission (uint) dan CreateContentEntry (*uint)
+	var projectID uint = 0
+	var projectIDPtr *uint
+
+	if ct.ProjectID != nil && *ct.ProjectID > 0 {
+		projectID = *ct.ProjectID
+		projectIDPtr = ct.ProjectID // Pointer untuk CreateContentEntry
+	}
+
+	// 4. Filter Field Berdasarkan Izin (Field-Level Permission)
+	// ⭐️ PERBAIKAN KRITIS: Menambahkan projectID sebagai argumen kelima (uint)
+	filteredData, err := middleware.FilterFieldsByPermission(userID, "create", data, ctID, projectID)
+
 	if err != nil {
+		// Error terjadi selama filter (misalnya, required field tidak diizinkan atau izin tidak ditemukan)
 		return response.Forbidden(c, err.Error())
 	}
 
+	// Periksa apakah ada data yang tersisa untuk disimpan
 	if len(filteredData) == 0 {
-		return response.BadRequest(c, "No data provided. Please provide at least one field to create an entry", nil)
+		return response.Forbidden(c, "You do not have permission to write to any allowed fields, or no data was provided.")
 	}
 
-	for k, v := range data {
-		if strings.HasSuffix(k, "_media_id") {
-			filteredData[k] = v
-		}
-	}
-
-	entry, err := CreateContentEntry(uint(contentTypeID), userID, filteredData)
+	// 5. Buat Entry Konten
+	// Menggunakan projectIDPtr (*uint) yang sesuai untuk fungsi CreateContentEntry
+	entry, err := CreateContentEntry(ctID, userID, filteredData, projectIDPtr)
 	if err != nil {
-		return response.BadRequest(c, err.Error(), nil)
+		// Error mungkin datang dari validasi data atau DB
+		return response.BadRequest(c, fmt.Sprintf("Failed to create entry: %s", err.Error()), nil)
 	}
 
 	return response.Created(c, entry, "Entry created successfully")
 }
 
+func mapJSONToData(payload map[string]interface{}, allFields []models.ContentField, ctID uint) map[string]interface{} {
+	data := make(map[string]interface{})
+	for _, field := range allFields {
+		if field.Type == "media" {
+			// Media ID harus dikirim sebagai media_id: X.X
+			if mediaID, ok := payload[field.Name+"_media_id"].(float64); ok {
+				data[field.Name+"_media_id"] = uint(mediaID)
+			}
+		} else {
+			if val, ok := payload[field.Name]; ok {
+				// Tambahkan field yang ada ke data
+				data[field.Name] = val
+			}
+		}
+	}
+	return data
+}
+
+func mapFormToData(c *fiber.Ctx, form *multipart.Form, allFields []models.ContentField, userID uint) (map[string]interface{}, error) {
+	data := make(map[string]interface{})
+
+	for _, field := range allFields {
+		if field.Type == "media" {
+			mediaIDStr := c.FormValue(field.Name + "_media_id")
+			fileHeader, fileExists := form.File[field.Name]
+
+			if mediaIDStr != "" {
+				// Case 1: Media ID sudah ada (existing file)
+				mediaID, err := strconv.ParseUint(mediaIDStr, 10, 32)
+				if err != nil {
+					return nil, fmt.Errorf("invalid media ID format for field %s", field.Name)
+				}
+				data[field.Name+"_media_id"] = uint(mediaID)
+
+			} else if fileExists && len(fileHeader) > 0 {
+				// Case 2: Upload file baru
+				url, err := utils.UploadFile(fileHeader[0])
+				if err != nil {
+					return nil, fmt.Errorf("failed to upload file for field %s: %w", field.Name, err)
+				}
+
+				// Simpan metadata ke MediaFile
+				mediaFile := models.MediaFile{
+					FileName:   fileHeader[0].Filename,
+					URL:        url,
+					Type:       fileHeader[0].Header.Get("Content-Type"),
+					UploadedBy: userID,
+				}
+
+				if err := database.DB.Create(&mediaFile).Error; err != nil {
+					utils.DeleteFile(url) // Clean up file jika DB gagal
+					return nil, errors.New("failed to save media metadata")
+				}
+
+				data[field.Name+"_media_id"] = mediaFile.ID
+			}
+			// Jika tidak ada media ID dan tidak ada file, lewati field ini.
+
+		} else {
+			// Case 3: Field standar
+			if val := c.FormValue(field.Name); val != "" {
+				data[field.Name] = val
+			}
+		}
+	}
+	return data, nil
+}
+
 func CreateEntryHandlerJSON(c *fiber.Ctx) error {
-	contentTypeID, _ := c.ParamsInt("content_type_id")
+	contentTypeIDInt, _ := c.ParamsInt("content_type_id")
+	contentTypeID := uint(contentTypeIDInt)
 	userID := c.Locals("user_id").(uint)
 
 	var ct models.ContentType
@@ -241,23 +320,40 @@ func CreateEntryHandlerJSON(c *fiber.Ctx) error {
 		}
 	}
 
-	filteredData, err := middleware.FilterFieldsByPermission(userID, "create", data, uint(contentTypeID))
+	// ⭐️ Tentukan ProjectID untuk Filter
+	var projectID uint = 0
+	var projectIDPtr *uint
+
+	if ct.ProjectID != nil && *ct.ProjectID > 0 {
+		projectID = *ct.ProjectID
+		projectIDPtr = ct.ProjectID
+	}
+
+	// ⭐️ PERBAIKAN PANGGILAN: Menambahkan projectID sebagai argumen kelima
+	filteredData, err := middleware.FilterFieldsByPermission(userID, "create", data, contentTypeID, projectID)
 	if err != nil {
 		return c.Status(403).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	if len(filteredData) == 0 {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "No data provided. Please provide at least one field to create an entry",
+		return c.Status(403).JSON(fiber.Map{ // Mengubah 400 menjadi 403 karena ini masalah izin field
+			"error": "You do not have permission to write to any allowed fields, or no data was provided.",
 		})
 	}
+
+	// Pastikan media_id dari data awal ditambahkan kembali ke filteredData jika fieldnya lolos filter
 	for k, v := range data {
 		if strings.HasSuffix(k, "_media_id") {
-			filteredData[k] = v
+			if _, ok := filteredData[strings.TrimSuffix(k, "_media_id")]; ok {
+				filteredData[k] = v
+			}
 		}
 	}
 
-	entry, err := CreateContentEntry(uint(contentTypeID), userID, filteredData)
+	// ⭐️ Hapus semua logika 'Get project_id from query' dan 'Verify user is a member'
+	// Logika ini sudah ditangani oleh middleware.PermissionProtected sebelumnya.
+
+	entry, err := CreateContentEntry(contentTypeID, userID, filteredData, projectIDPtr)
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -267,8 +363,27 @@ func CreateEntryHandlerJSON(c *fiber.Ctx) error {
 
 func ListEntriesHandler(c *fiber.Ctx) error {
 	contentTypeID, _ := c.ParamsInt("content_type_id")
+	userID := c.Locals("user_id").(uint)
 
-	query := database.DB.Where("content_type_id = ?", contentTypeID)
+	// Get content type to check if it belongs to a project
+	var ct models.ContentType
+	if err := database.DB.First(&ct, contentTypeID).Error; err != nil {
+		return response.NotFound(c, "Content type")
+	}
+
+	query := database.DB.Model(&models.ContentEntry{}).Where("content_type_id = ?", contentTypeID)
+
+	// Filter by project if content type belongs to a project
+	if ct.ProjectID != nil {
+		// Verify user is a member of the project
+		if _, err := project.GetProjectMember(*ct.ProjectID, userID); err != nil {
+			return response.Forbidden(c, "You are not a member of this project")
+		}
+		query = query.Where("project_id = ?", *ct.ProjectID)
+	} else {
+		// For global content types, only show global entries (project_id IS NULL)
+		query = query.Where("project_id IS NULL")
+	}
 
 	if status := c.Query("status"); status != "" {
 		query = query.Where("status = ?", status)
@@ -288,6 +403,8 @@ func ListEntriesHandler(c *fiber.Ctx) error {
 	page := c.QueryInt("page", 1)
 	limit := c.QueryInt("limit", 10)
 	offset := (page - 1) * limit
+
+	// debug logging removed
 
 	var entries []models.ContentEntry
 	var total int64
@@ -346,13 +463,23 @@ func ListRelationsHandler(c *fiber.Ctx) error {
 
 func SEOPreviewHandler(c *fiber.Ctx) error {
 	entryID, err := c.ParamsInt("entry_id")
-	if err != nil {
-		return response.BadRequest(c, "Invalid entry ID", nil)
+	if err != nil || entryID <= 0 {
+		return response.BadRequest(c, "Invalid or missing Content Entry ID", nil)
 	}
 
 	seoData, err := GenerateSEOPreview(uint(entryID))
+
 	if err != nil {
-		return response.InternalError(c, "Failed to generate SEO preview")
+		// Tangani error spesifik dari service layer
+		if fiberErr, ok := err.(*fiber.Error); ok {
+			return fiberErr // Kembalikan error Fiber yang sudah dibuat (misal 404 Not Found)
+		}
+		// Tangani error internal database atau unmarshal
+		return response.InternalError(c, fmt.Sprintf("Failed to generate SEO preview: %s", err.Error()))
+	}
+
+	if len(seoData) == 0 {
+		return response.NotFound(c, "No SEO data or related fields found for this content entry.")
 	}
 
 	return response.Success(c, seoData, "SEO preview generated successfully")
@@ -379,42 +506,46 @@ func UpdateEntryHandler(c *fiber.Ctx) error {
 	allFields := append(ct.Fields, ct.SEOFields...)
 	data := make(map[string]interface{})
 
+	// --- 1. Parsing Payload (Multipart atau JSON) ---
+
+	// Coba parsing Multipart Form
 	if form, err := c.MultipartForm(); err == nil {
+		// Logika parsing form dan upload file (Sudah Anda sediakan dan biarkan)
 		for _, field := range allFields {
 			if field.Type == "media" {
+				// ... (Logika penanganan media ID dan upload file) ...
 				mediaIDStr := c.FormValue(field.Name + "_media_id")
 
 				if mediaIDStr != "" {
+					// Logic to handle existing media ID
 					mediaID, err := strconv.ParseUint(mediaIDStr, 10, 32)
 					if err != nil {
 						return response.BadRequest(c, "Invalid media ID for field "+field.Name, nil)
 					}
-
+					// Cek ketersediaan mediaFile
 					var mediaFile models.MediaFile
 					if err := database.DB.First(&mediaFile, uint(mediaID)).Error; err != nil {
 						return response.NotFound(c, "Media for field "+field.Name)
 					}
-
 					data[field.Name] = mediaFile.URL
 					data[field.Name+"_media_id"] = mediaFile.ID
 				} else if fileHeaders, ok := form.File[field.Name]; ok && len(fileHeaders) > 0 {
+					// Logic to handle new file upload
 					url, err := utils.UploadFile(fileHeaders[0])
 					if err != nil {
 						return response.BadRequest(c, "Failed to upload file", err.Error())
 					}
-
+					// Simpan metadata
 					mediaFile := models.MediaFile{
 						FileName:   fileHeaders[0].Filename,
 						URL:        url,
 						Type:       fileHeaders[0].Header.Get("Content-Type"),
 						UploadedBy: userID,
 					}
-
 					if err := database.DB.Create(&mediaFile).Error; err != nil {
 						utils.DeleteFile(url)
 						return response.InternalError(c, "Failed to save media metadata")
 					}
-
 					data[field.Name] = url
 					data[field.Name+"_media_id"] = mediaFile.ID
 				}
@@ -425,6 +556,7 @@ func UpdateEntryHandler(c *fiber.Ctx) error {
 			}
 		}
 	} else {
+		// Fallback ke BodyParser jika bukan Multipart (misalnya JSON)
 		if err := c.BodyParser(&data); err != nil {
 			return response.BadRequest(c, "Invalid request body", err.Error())
 		}
@@ -434,7 +566,14 @@ func UpdateEntryHandler(c *fiber.Ctx) error {
 		return response.BadRequest(c, "No data provided for update", nil)
 	}
 
-	filteredData, err := middleware.FilterFieldsByPermission(userID, "update", data, entry.ContentTypeID)
+	// --- 2. Tentukan ProjectID untuk Filter ---
+	var projectID uint = 0
+	if ct.ProjectID != nil && *ct.ProjectID > 0 {
+		projectID = *ct.ProjectID
+	}
+
+	// ⭐️ PERBAIKAN PANGGILAN: Menambahkan projectID sebagai argumen kelima
+	filteredData, err := middleware.FilterFieldsByPermission(userID, "update", data, entry.ContentTypeID, projectID)
 	if err != nil {
 		return response.Forbidden(c, err.Error())
 	}
@@ -443,19 +582,28 @@ func UpdateEntryHandler(c *fiber.Ctx) error {
 		return response.BadRequest(c, "No valid fields to update. All provided fields were filtered out by permissions or don't exist", nil)
 	}
 
+	// --- 3. Tambahkan kembali media_id yang lolos filter ---
+	// Logika ini dipindahkan ke sini untuk memastikan media_id ditambahkan SETELAH filter sukses
 	for k, v := range data {
 		if strings.HasSuffix(k, "_media_id") {
-			filteredData[k] = v
+			if _, ok := filteredData[strings.TrimSuffix(k, "_media_id")]; ok {
+				filteredData[k] = v
+			}
 		}
 	}
 
+	// --- 4. Validasi dan Simpan ---
+
+	// Asumsi ValidatePartialUpdate sudah didefinisikan
 	if err := ValidatePartialUpdate(ct, filteredData, uint(entryID)); err != nil {
 		return response.BadRequest(c, err.Error(), nil)
 	}
 
 	var existingData map[string]interface{}
+	// Masukkan existingData ke map
 	json.Unmarshal([]byte(entry.Data), &existingData)
 
+	// Gabungkan data yang difilter ke existingData
 	for k, v := range filteredData {
 		existingData[k] = v
 	}
@@ -466,7 +614,6 @@ func UpdateEntryHandler(c *fiber.Ctx) error {
 	}
 
 	entry.Data = datatypes.JSON(jsonData)
-	entry.Status = models.StatusDraft
 	entry.UpdatedBy = userID
 
 	if err := database.DB.Save(&entry).Error; err != nil {
@@ -479,8 +626,27 @@ func UpdateEntryHandler(c *fiber.Ctx) error {
 }
 
 func ListContentTypesHandler(c *fiber.Ctx) error {
+	userID := c.Locals("user_id").(uint)
 	var cts []models.ContentType
-	if err := database.DB.
+	query := database.DB
+
+	// Filter by project if project_id is provided
+	if projectIDStr := c.Query("project_id"); projectIDStr != "" {
+		if pid, err := strconv.ParseUint(projectIDStr, 10, 32); err == nil {
+			projectID := uint(pid)
+			// Verify user is a member
+			if _, err := project.GetProjectMember(projectID, userID); err != nil {
+				return response.Forbidden(c, "You are not a member of this project")
+			}
+			query = query.Where("project_id = ?", projectID)
+		}
+	} else {
+		// If no project_id, show only global content types (project_id IS NULL)
+		// and project content types where user is a member
+		query = query.Where("project_id IS NULL OR project_id IN (SELECT project_id FROM project_members WHERE user_id = ? AND status = 'active' AND deleted_at IS NULL)", userID)
+	}
+
+	if err := query.
 		Preload("Fields", "is_seo = ?", false).
 		Preload("SEOFields", "is_seo = ?", true).
 		Find(&cts).Error; err != nil {
@@ -662,6 +828,32 @@ func inferLangFromAcceptLanguage(header string) string {
 	return primary
 }
 
+func GetEntriesSemuaHandler(c *fiber.Ctx) error {
+	// Ambil User ID dari Fiber Locals
+	userID := c.Locals("user_id").(uint)
+
+	// Ambil ContentTypeID dari query parameter untuk filtering opsional
+	contentTypeIDStr := c.Query("content_type_id")
+	var contentTypeID uint = 0
+
+	if contentTypeIDStr != "" {
+		if id, err := strconv.ParseUint(contentTypeIDStr, 10, 32); err == nil {
+			contentTypeID = uint(id)
+		} else {
+			return response.BadRequest(c, "Invalid content_type_id in query parameter", nil)
+		}
+	}
+
+	// Panggil service layer
+	entries, err := GetAccessibleEntries(userID, contentTypeID)
+	if err != nil {
+		return response.InternalError(c, "Failed to fetch accessible entries")
+	}
+
+	// Kembalikan 200 OK dengan list entries
+	return response.Success(c, entries, "Entries retrieved successfully")
+}
+
 func UpdateContentTypeHandler(c *fiber.Ctx) error {
 	id, err := c.ParamsInt("id")
 	if err != nil {
@@ -724,25 +916,51 @@ func DeleteContentTypeHandler(c *fiber.Ctx) error {
 }
 
 func UpdateFieldHandler(c *fiber.Ctx) error {
+	// 1. Ambil Parameter dari URL
+	// Gunakan := untuk variabel baru agar tidak menimpa error dari c.ParamsInt
 	fieldID, err := c.ParamsInt("field_id")
 	if err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "invalid field_id"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Invalid field ID provided."})
 	}
 
+	contentTypeID, err := c.ParamsInt("content_type_id")
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Invalid content type ID provided."})
+	}
+
+	// 2. Binding Request Body
 	var body AddFieldRequest
 	if err := c.BodyParser(&body); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": fmt.Sprintf("Invalid request body: %v", err)})
 	}
 
-	var field models.ContentField
-	if err := database.DB.First(&field, fieldID).Error; err != nil {
-		return c.Status(404).JSON(fiber.Map{"error": "field not found"})
+	// ⭐️ 3. VALIDASI INPUT (Minimal)
+	if body.Name == "" || body.Type == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "Field name and type are required."})
 	}
+
+	// 4. Cari Field yang Akan Diupdate
+	var field models.ContentField
+
+	// ⭐️ PENTING: Pastikan Field ID milik ContentType ID yang benar
+	if err := database.DB.Where("content_type_id = ?", contentTypeID).First(&field, fieldID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Mengembalikan 404 jika field tidak ditemukan ATAU tidak termasuk ContentType ID yang diberikan
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"success": false, "message": "Field not found or does not belong to the specified content type."})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": fmt.Sprintf("Database error: %v", err)})
+	}
+
+	// 5. Update Properti Field (Menggunakan Struct untuk kebersihan)
+
+	// Perhatikan: Kita tidak mengizinkan perubahan ContentTypeID setelah field dibuat
 
 	field.Name = body.Name
 	field.Type = body.Type
 	field.Required = body.Required
 	field.IsSEO = body.IsSEO
+
+	// Update Validation Rules
 	field.Unique = body.Unique
 	field.MaxLength = body.MaxLength
 	field.MinLength = body.MinLength
@@ -753,13 +971,22 @@ func UpdateFieldHandler(c *fiber.Ctx) error {
 	field.Placeholder = body.Placeholder
 	field.HelpText = body.HelpText
 
+	// 6. Simpan Perubahan
 	if err := database.DB.Save(&field).Error; err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		// Cek jika error GORM adalah violation (misalnya, Name/Unique Constraint)
+		// Ini sering terjadi jika Anda mencoba mengganti nama field menjadi yang sudah ada.
+		if strings.Contains(err.Error(), "duplicate key value") || strings.Contains(err.Error(), "unique constraint") {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"success": false, "message": "A field with this name already exists in this content type."})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": fmt.Sprintf("Failed to save field changes: %v", err)})
 	}
 
+	// 7. Respon Sukses
 	return c.JSON(fiber.Map{
-		"message":          "field updated successfully",
-		"field":            field,
+		"success": true,
+		"message": "Field updated successfully.",
+		"field":   field,
+		// Asumsi GetFieldValidationRules ada dan mengembalikan aturan yang dapat dibaca
 		"validation_rules": GetFieldValidationRules(field),
 	})
 }

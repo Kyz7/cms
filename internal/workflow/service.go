@@ -2,10 +2,12 @@ package workflow
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Kyz7/cms/internal/database"
 	"github.com/Kyz7/cms/internal/models"
+	"github.com/Kyz7/cms/internal/project"
 )
 
 func ChangeWorkflowStatus(entryID, userID uint, toStatus string, comment string) (*models.ContentEntry, error) {
@@ -21,9 +23,29 @@ func ChangeWorkflowStatus(entryID, userID uint, toStatus string, comment string)
 
 	targetStatus := models.WorkflowStatus(toStatus)
 
-	if !isValidTransition(entry.Status, targetStatus, user.Role.Name) {
+	// Determine user role: project role if entry belongs to project, otherwise global role
+	userRole := user.Role.Name
+	if entry.ProjectID != nil {
+		// Entry belongs to a project, check project membership
+		projectRole, err := project.GetUserProjectRole(*entry.ProjectID, userID)
+		if err != nil {
+			return nil, fmt.Errorf("you are not a member of this project")
+		}
+		// Map project role to workflow role
+		userRole = mapProjectRoleToWorkflowRole(projectRole)
+	}
+
+	if !isValidTransition(entry.Status, targetStatus, userRole) {
 		return nil, fmt.Errorf("invalid status transition from %s to %s for role %s",
-			entry.Status, targetStatus, user.Role.Name)
+			entry.Status, targetStatus, userRole)
+	}
+
+	if entry.Status == models.StatusInReview && targetStatus == models.StatusRejected {
+		if userRole == "editor" {
+			if strings.TrimSpace(comment) == "" {
+				return nil, fmt.Errorf("comment is required when rejecting from In Review for role editor")
+			}
+		}
 	}
 
 	fromStatus := entry.Status
@@ -50,6 +72,21 @@ func ChangeWorkflowStatus(entryID, userID uint, toStatus string, comment string)
 	}
 
 	return &entry, nil
+}
+
+// mapProjectRoleToWorkflowRole maps project roles to workflow roles
+// owner/admin -> admin, editor -> editor, viewer -> viewer
+func mapProjectRoleToWorkflowRole(projectRole string) string {
+	switch projectRole {
+	case models.ProjectRoleOwner, models.ProjectRoleAdmin:
+		return "admin"
+	case models.ProjectRoleEditor:
+		return "editor"
+	case models.ProjectRoleViewer:
+		return "viewer"
+	default:
+		return "viewer"
+	}
 }
 
 func isValidTransition(fromStatus, toStatus models.WorkflowStatus, userRole string) bool {

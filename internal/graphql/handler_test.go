@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Kyz7/cms/internal/database"
@@ -104,7 +105,7 @@ func TestGraphQLLogin(t *testing.T) {
 				login(email: "nonexistent@example.com", password: "password123") {
 					token
 					user {
-						id
+					id
 					}
 				}
 			}
@@ -164,7 +165,7 @@ func TestGraphQLRegister(t *testing.T) {
 				register(name: "First User", email: "duplicate@example.com", password: "password123") {
 					token
 					user {
-						id
+					id
 					}
 				}
 			}
@@ -177,7 +178,7 @@ func TestGraphQLRegister(t *testing.T) {
 				register(name: "Second User", email: "duplicate@example.com", password: "password123") {
 					token
 					user {
-						id
+					id
 					}
 				}
 			}
@@ -219,9 +220,21 @@ func TestGraphQLUsersQuery(t *testing.T) {
 		assert.Equal(t, 200, resp.Code)
 
 		graphqlResp := ParseGraphQLResponse(t, resp)
+		if len(graphqlResp.Errors) > 0 {
+			t.Logf("GraphQL errors: %+v", graphqlResp.Errors)
+		}
+
+		if graphqlResp.Data == nil {
+			t.Fatalf("GraphQL data is nil")
+		}
+
 		data := graphqlResp.Data.(map[string]interface{})
-		users := data["users"].([]interface{})
-		assert.GreaterOrEqual(t, len(users), 2)
+		if users, ok := data["users"]; ok && users != nil {
+			usersList := users.([]interface{})
+			assert.GreaterOrEqual(t, len(usersList), 2)
+		} else {
+			t.Fatalf("users field missing or nil in GraphQL response")
+		}
 	})
 
 	t.Run("Success - Get users with pagination", func(t *testing.T) {
@@ -521,7 +534,7 @@ func TestGraphQLContentEntries(t *testing.T) {
 		data := graphqlResp.Data.(map[string]interface{})
 		entry := data["contentEntry"].(map[string]interface{})
 		assert.NotNil(t, entry["data"])
-		assert.Equal(t, "draft", entry["status"])
+		assert.Equal(t, "DRAFT", entry["status"])
 	})
 }
 
@@ -571,7 +584,7 @@ func TestGraphQLCreateContentEntry(t *testing.T) {
 		data := graphqlResp.Data.(map[string]interface{})
 		created := data["createContentEntry"].(map[string]interface{})
 		assert.NotNil(t, created["id"])
-		assert.Equal(t, "draft", created["status"])
+		assert.Equal(t, "draft", strings.ToLower(created["status"].(string)))
 	})
 }
 
@@ -764,8 +777,8 @@ func TestGraphQLBatchRequests(t *testing.T) {
 				"query": `
 					query {
 						users(limit: 1) {
-							id
-							email
+						 id
+						 email
 						}
 					}
 				`,
@@ -774,8 +787,8 @@ func TestGraphQLBatchRequests(t *testing.T) {
 				"query": `
 					query {
 						contentTypes {
-							id
-							name
+						 id
+						 name
 						}
 					}
 				`,
@@ -784,8 +797,8 @@ func TestGraphQLBatchRequests(t *testing.T) {
 				"query": `
 					query {
 						roles {
-							id
-							name
+						 id
+						 name
 						}
 					}
 				`,

@@ -7,6 +7,7 @@ import (
 
 	"github.com/Kyz7/cms/internal/config"
 	"github.com/Kyz7/cms/internal/database"
+	"github.com/Kyz7/cms/internal/globals"
 	"github.com/Kyz7/cms/internal/models"
 	"github.com/Kyz7/cms/internal/role"
 	"github.com/Kyz7/cms/internal/server"
@@ -99,6 +100,12 @@ func main() {
 		log.Println("⚠️  Failed to seed workflow transitions:", err)
 	} else {
 		log.Println("✅ Workflow transitions seeded")
+	}
+
+	if err := globals.InitRoleCache(database.DB); err != nil {
+		log.Println("⚠️  Failed to initialize role cache:", err)
+	} else {
+		log.Println("✅ Role cache initialized")
 	}
 
 	// ========== BACKGROUND JOBS ==========

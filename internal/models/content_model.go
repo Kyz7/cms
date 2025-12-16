@@ -9,8 +9,10 @@ import (
 
 type ContentType struct {
 	ID        uint           `gorm:"primaryKey" json:"id"`
-	Name      string         `gorm:"size:100;uniqueIndex" json:"name"`
-	Slug      string         `gorm:"size:100;uniqueIndex" json:"slug"`
+	Name      string         `gorm:"size:100" json:"name"`
+	Slug      string         `gorm:"size:100" json:"slug"`
+	ProjectID *uint          `gorm:"index" json:"project_id,omitempty"` // nullable for global content types
+	Project   *Project       `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
 	EnableSEO bool           `json:"enable_seo"`
 	Fields    []ContentField `gorm:"foreignKey:ContentTypeID" json:"fields"`
 	SEOFields []ContentField `gorm:"foreignKey:ContentTypeID" json:"seo_fields"`
@@ -46,6 +48,9 @@ type ContentField struct {
 type ContentEntry struct {
 	ID            uint           `gorm:"primaryKey" json:"id"`
 	ContentTypeID uint           `json:"content_type_id"`
+	ContentType   ContentType    `gorm:"foreignKey:ContentTypeID" json:"content_type"`
+	ProjectID     *uint          `gorm:"index" json:"project_id,omitempty"` // nullable for global entries
+	Project       *Project       `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
 	Data          datatypes.JSON `json:"data"`
 	Status        WorkflowStatus `gorm:"type:workflow_status;default:'draft';index" json:"status"`
 	CreatedBy     uint           `gorm:"index" json:"created_by,omitempty"`

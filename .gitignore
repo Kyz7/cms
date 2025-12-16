@@ -50,3 +50,15 @@ coverage.txt
 
 # Node modules (if project includes frontend)
 node_modules/
+<<<<<<< HEAD
+=======
+
+# ================================
+# CUSTOM IGNORES
+# ================================
+
+# Ignore ALL uploads folders in the project
+uploads/
+internal/media/uploads/
+**/uploads/
+>>>>>>> master

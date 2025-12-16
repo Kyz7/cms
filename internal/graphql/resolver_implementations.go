@@ -580,6 +580,7 @@ func (r *Resolvers) ContentEntryResolver(p graphql.ResolveParams) (interface{}, 
 		return nil, err
 	}
 
+	fmt.Printf("DEBUG ContentEntry: ID=%d, Status=%s (type: %T)\n", entry.ID, entry.Status, entry.Status)
 	return ConvertContentEntryToGraphQL(&entry), nil
 }
 
@@ -618,6 +619,12 @@ func (r *Resolvers) CreateContentEntryResolver(p graphql.ResolveParams) (interfa
 		return nil, err
 	}
 
+	// Fetch entry with relationships
+	if err := r.DB.Preload("Creator").Preload("Updater").First(entry, entry.ID).Error; err != nil {
+		return nil, err
+	}
+
+	fmt.Printf("DEBUG CreateContentEntry: ID=%d, Status=%s (type: %T)\n", entry.ID, entry.Status, entry.Status)
 	return ConvertContentEntryToGraphQL(entry), nil
 }
 
@@ -663,6 +670,11 @@ func (r *Resolvers) UpdateContentEntryResolver(p graphql.ResolveParams) (interfa
 	entry.UpdatedBy = userID
 
 	if err := r.DB.Save(&entry).Error; err != nil {
+		return nil, err
+	}
+
+	// Fetch entry with relationships
+	if err := r.DB.Preload("Creator").Preload("Updater").First(&entry, entry.ID).Error; err != nil {
 		return nil, err
 	}
 

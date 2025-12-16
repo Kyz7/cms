@@ -643,7 +643,7 @@ func ConvertContentEntryToGraphQL(entry *models.ContentEntry) map[string]interfa
 		"id":            entry.ID,
 		"contentTypeId": entry.ContentTypeID,
 		"data":          entry.Data,
-		"status":        entry.Status,
+		"status":        string(entry.Status),
 		"createdBy":     entry.CreatedBy,
 		"updatedBy":     entry.UpdatedBy,
 		"createdAt":     entry.CreatedAt,

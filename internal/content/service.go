@@ -2,6 +2,7 @@ package content
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -9,12 +10,19 @@ import (
 	"time"
 
 	"github.com/Kyz7/cms/internal/database"
+	"github.com/Kyz7/cms/internal/middleware"
 	"github.com/Kyz7/cms/internal/models"
+	"github.com/gofiber/fiber/v2"
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
-func CreateContentType(name, slug string) (*models.ContentType, error) {
-	ct := models.ContentType{Name: name, Slug: slug}
+func CreateContentType(name, slug string, projectID *uint) (*models.ContentType, error) {
+	ct := models.ContentType{
+		Name:      name,
+		Slug:      slug,
+		ProjectID: projectID,
+	}
 	if err := database.DB.Create(&ct).Error; err != nil {
 		return nil, err
 	}
@@ -41,14 +49,6 @@ func AddFieldToContentType(contentTypeID uint, name, fieldType string, required 
 	}
 
 	return &field, nil
-}
-
-func ListContentEntries(contentTypeID uint) ([]models.ContentEntry, error) {
-	var entries []models.ContentEntry
-	if err := database.DB.Where("content_type_id = ?", contentTypeID).Find(&entries).Error; err != nil {
-		return nil, err
-	}
-	return entries, nil
 }
 
 func CreateContentRelation(fromID, toID uint, relationType string) (*models.ContentRelation, error) {
@@ -369,10 +369,19 @@ func GetFieldValidationRules(field models.ContentField) map[string]interface{} {
 	return rules
 }
 
-func CreateContentEntry(contentTypeID, createdBy uint, data map[string]interface{}) (*models.ContentEntry, error) {
+func CreateContentEntry(contentTypeID, createdBy uint, data map[string]interface{}, projectID *uint) (*models.ContentEntry, error) {
 	var ct models.ContentType
 	if err := database.DB.Preload("Fields").Preload("SEOFields").First(&ct, contentTypeID).Error; err != nil {
 		return nil, err
+	}
+
+	// If content type has project_id, ensure it matches the entry's project_id
+	if ct.ProjectID != nil {
+		if projectID == nil || *ct.ProjectID != *projectID {
+			return nil, fmt.Errorf("entry project_id must match content type project_id")
+		}
+	} else if projectID != nil {
+		return nil, fmt.Errorf("cannot create project entry for global content type")
 	}
 
 	if err := ValidateContentEntryEnhanced(ct, data); err != nil {
@@ -386,6 +395,7 @@ func CreateContentEntry(contentTypeID, createdBy uint, data map[string]interface
 
 	entry := models.ContentEntry{
 		ContentTypeID: contentTypeID,
+		ProjectID:     projectID,
 		Data:          datatypes.JSON(jsonData),
 		Status:        models.StatusDraft,
 		CreatedBy:     createdBy,
@@ -401,23 +411,132 @@ func CreateContentEntry(contentTypeID, createdBy uint, data map[string]interface
 
 func GenerateSEOPreview(entryID uint) (map[string]interface{}, error) {
 	var entry models.ContentEntry
+
+	// 1. Ambil Content Entry
 	if err := database.DB.First(&entry, entryID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fiber.NewError(fiber.StatusNotFound, "Content entry not found")
+		}
 		return nil, err
 	}
 
 	var data map[string]interface{}
+	// 2. Unmarshal data JSONB
 	if err := json.Unmarshal([]byte(entry.Data), &data); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal content data: %w", err)
 	}
 
+	// 3. Ambil Fields yang terkait dengan ContentType dari Entry ini
+	var seoFields []models.ContentField
+
+	// Query hanya mengambil fields yang ditandai is_seo=TRUE
+	err := database.DB.
+		Where("content_type_id = ? AND is_seo = TRUE", entry.ContentTypeID).
+		Find(&seoFields).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve SEO fields from schema: %w", err)
+	}
+
+	// 4. Inisialisasi daftar nama field SEO yang diizinkan (dari skema & hardcode)
+	seoFieldNames := make(map[string]bool)
+
+	// A. Tambahkan dari Skema Database (is_seo = TRUE)
+	for _, field := range seoFields {
+		seoFieldNames[field.Name] = true
+	}
+
+	// B. Tambahkan Hardcode/Konvensi standar (Meta, Slug, dll.)
+	// Ini menangani field seperti "meta_title" yang mungkin tidak didesain sebagai ContentField
+	// tetapi selalu diakui sebagai SEO.
+	seoFieldNames["slug"] = true
+	seoFieldNames["meta_title"] = true
+	seoFieldNames["meta_description"] = true
+	seoFieldNames["meta_image"] = true
+
+	// 5. Filter data berdasarkan nama field SEO yang ditemukan
 	seoData := make(map[string]interface{})
+
 	for k, v := range data {
-		if strings.HasPrefix(k, "seo_") || k == "slug" || k == "meta_title" || k == "meta_description" || k == "meta_image" {
+		kLower := strings.ToLower(k) // Gunakan kLower untuk pengecekan "meta" / "seo"
+
+		// Cek 1: Berdasarkan Nama Field yang ada di Skema/Hardcode
+		if seoFieldNames[k] {
 			seoData[k] = v
+			continue
+		}
+
+		// Cek 2: Logika Tambahan jika Anda ingin menyertakan field *lain* yang mengandung "meta" atau "seo"
+		// Misalnya, jika ada field "seo_rating" yang tidak terdaftar di skema.
+		if strings.Contains(kLower, "meta") || strings.Contains(kLower, "seo") {
+			seoData[k] = v
+			continue
+		}
+
+		// Cek 3: Pasangan kunci media ID-nya
+		if strings.HasSuffix(kLower, "_media_id") {
+			baseFieldName := strings.TrimSuffix(k, "_media_id")
+			// Cek apakah baseFieldName adalah SEO (baik dari skema maupun hardcode)
+			if seoFieldNames[baseFieldName] || strings.Contains(baseFieldName, "meta") || strings.Contains(baseFieldName, "seo") {
+				seoData[k] = v
+			}
 		}
 	}
 
+	// 6. Validasi Akhir
+	if len(seoData) == 0 {
+		return nil, nil
+	}
+
 	return seoData, nil
+}
+func getPlaceholderString(count int) string {
+	if count <= 0 {
+		return ""
+	}
+	placeholders := make([]string, count)
+	for i := range placeholders {
+		placeholders[i] = "?"
+	}
+	return strings.Join(placeholders, ", ")
+}
+
+func GetAccessibleEntries(userID uint, contentTypeID uint) ([]models.ContentEntry, error) {
+	// 1. Ambil Project ID yang dapat diakses (MENGGUNAKAN FUNGSI ANDA YANG SUDAH ADA)
+	const Module = "ProjectContent"
+	const Action = "read"
+
+	accessibleProjectIDs := middleware.GetAccessibleProjectIDs(userID, Module, Action) // ⭐️ Menggunakan helper Anda
+
+	// 2. Tentukan kriteria query dasar
+	query := database.DB.Preload("ContentType").Model(&models.ContentEntry{})
+
+	// Filter berdasarkan ContentTypeID jika disediakan
+	if contentTypeID > 0 {
+		query = query.Where("content_type_id = ?", contentTypeID)
+	}
+
+	// 3. Tentukan kriteria otorisasi (ProjectID IS NULL OR ProjectID IN (...))
+
+	// Mencari entri di project yang diizinkan ATAU entri yang bersifat global (ProjectID IS NULL)
+	if len(accessibleProjectIDs) > 0 {
+		// Logika: Tampilkan entri ProjectID yang diizinkan ATAU yang Global
+		query = query.Where(
+			database.DB.Where("project_id IN (?)", accessibleProjectIDs).Or("project_id IS NULL"),
+		)
+	} else {
+		// Logika: Jika user tidak memiliki akses Project (tidak ada accessibleProjectIDs),
+		// hanya tampilkan yang Global
+		query = query.Where("project_id IS NULL")
+	}
+
+	var entries []models.ContentEntry
+	// Urutkan (opsional)
+	if err := query.Order("project_id ASC").Find(&entries).Error; err != nil {
+		return nil, fmt.Errorf("database query failed: %w", err)
+	}
+
+	return entries, nil
 }
 
 func UpdateEntry(entryID, updatedBy uint, data map[string]interface{}) (*models.ContentEntry, error) {

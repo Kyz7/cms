@@ -63,6 +63,46 @@ type PasswordReset {
 }
 
 # ==========================================
+<<<<<<< HEAD
+=======
+# PROJECT MANAGEMENT
+# ==========================================
+
+type Project {
+  id: ID!
+  name: String!
+  description: String
+  createdBy: Int!
+  creator: User
+  members: [ProjectMember!]!
+  contentTypes: [ContentType!]!
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type ProjectMember {
+  id: ID!
+  projectId: Int!
+  project: Project
+  userId: Int!
+  user: User
+  role: String!
+  invitedBy: Int
+  inviter: User
+  status: String!
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+enum ProjectRole {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+# ==========================================
+>>>>>>> master
 # CONTENT MANAGEMENT
 # ==========================================
 
@@ -70,6 +110,11 @@ type ContentType {
   id: ID!
   name: String!
   slug: String!
+<<<<<<< HEAD
+=======
+  projectId: Int
+  project: Project
+>>>>>>> master
   enableSeo: Boolean!
   fields: [ContentField!]!
   seoFields: [ContentField!]!
@@ -101,6 +146,11 @@ type ContentEntry {
   id: ID!
   contentTypeId: Int!
   contentType: ContentType
+<<<<<<< HEAD
+=======
+  projectId: Int
+  project: Project
+>>>>>>> master
   data: JSON!
   status: WorkflowStatus!
   createdBy: Int
@@ -307,10 +357,36 @@ input PermissionInput {
   contentTypeIds: JSON
 }
 
+<<<<<<< HEAD
+=======
+input ProjectInput {
+  name: String!
+  description: String
+}
+
+input UpdateProjectInput {
+  name: String!
+  description: String
+}
+
+input AddProjectMemberInput {
+  userId: ID!
+  role: ProjectRole!
+}
+
+input UpdateProjectMemberRoleInput {
+  role: ProjectRole!
+}
+
+>>>>>>> master
 input ContentTypeInput {
   name: String!
   slug: String!
   enableSeo: Boolean!
+<<<<<<< HEAD
+=======
+  projectId: Int
+>>>>>>> master
 }
 
 input ContentFieldInput {
@@ -398,6 +474,14 @@ input SearchSortInput {
   direction: String!
 }
 
+<<<<<<< HEAD
+=======
+input GoogleOAuthInput {
+  code: String!
+  state: String!
+}
+
+>>>>>>> master
 input LoginInput {
   email: String!
   password: String!
@@ -439,6 +523,14 @@ type Query {
   roles: [Role!]!
   role(id: ID!): Role
   
+<<<<<<< HEAD
+=======
+  # Project Management
+  projects: [Project!]!
+  project(id: ID!): Project
+  projectMembers(projectId: ID!): [ProjectMember!]!
+  
+>>>>>>> master
   # Content Management
   contentTypes: [ContentType!]!
   contentType(id: ID!): ContentType
@@ -476,6 +568,10 @@ type Mutation {
   # Authentication
   login(input: LoginInput!): AuthPayload!
   register(input: RegisterInput!): AuthPayload!
+<<<<<<< HEAD
+=======
+  googleOAuth(input: GoogleOAuthInput!): AuthPayload!
+>>>>>>> master
   refreshToken(input: RefreshTokenInput!): AuthPayload!
   forgotPassword(input: ForgotPasswordInput!): Boolean!
   resetPassword(input: ResetPasswordInput!): Boolean!
@@ -493,6 +589,17 @@ type Mutation {
   duplicateRole(id: ID!): Role!
   assignRoleToUser(userId: ID!, roleId: ID!): Boolean!
   
+<<<<<<< HEAD
+=======
+  # Project Management
+  createProject(input: ProjectInput!): Project!
+  updateProject(id: ID!, input: UpdateProjectInput!): Project!
+  deleteProject(id: ID!): Boolean!
+  addProjectMember(projectId: ID!, input: AddProjectMemberInput!): ProjectMember!
+  updateProjectMemberRole(projectId: ID!, memberId: ID!, input: UpdateProjectMemberRoleInput!): ProjectMember!
+  removeProjectMember(projectId: ID!, memberId: ID!): Boolean!
+  
+>>>>>>> master
   # Content Management
   createContentType(input: ContentTypeInput!): ContentType!
   updateContentType(id: ID!, input: ContentTypeInput!): ContentType!

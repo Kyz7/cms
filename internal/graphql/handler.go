@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/Kyz7/cms/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/gqlerrors"
@@ -301,12 +302,19 @@ func (r *Resolvers) getUserIDFromHeader(c *fiber.Ctx) uint {
 		return 0
 	}
 
-	if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
-		token := authHeader[7:]
-		// Here you would validate the JWT token and extract user ID
-		// For now, return 0 (no user)
-		_ = token
+	// Extract Bearer token
+	const bearerPrefix = "Bearer "
+	if len(authHeader) <= len(bearerPrefix) || authHeader[:len(bearerPrefix)] != bearerPrefix {
+		return 0
 	}
 
-	return 0
+	token := authHeader[len(bearerPrefix):]
+
+	// Parse and validate JWT token
+	userID, err := utils.ParseJWT(token)
+	if err != nil {
+		return 0
+	}
+
+	return userID
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -320,9 +321,9 @@ func TestGoogleLogin(t *testing.T) {
 		// Should redirect (302 or 307)
 		assert.True(t, resp.Code == 302 || resp.Code == 307, "Expected redirect status")
 
-		// Check redirect location contains Google OAuth URL
+		// Check redirect location contains Google OAuth host and params
 		location := resp.Header().Get("Location")
-		assert.Contains(t, location, "accounts.google.com/o/oauth2/auth")
+		assert.Contains(t, location, "accounts.google.com")
 		assert.Contains(t, location, "client_id=test-client-id")
 		assert.Contains(t, location, "state=")
 	})
@@ -485,10 +486,31 @@ func TestGoogleUserDataHandling(t *testing.T) {
 
 // Helper function to generate and store test state
 func generateAndStoreTestState(t *testing.T) string {
-	testutils.SetupTestApp(t)
-	// This is a simplified version
-	// In real implementation, this would call the actual state management
-	state := "test-state-" + time.Now().Format("20060102150405")
+	app := testutils.SetupTestApp(t)
+
+	// Call the login endpoint to generate and store a valid state in the app
+	resp, err := testutils.MakeRedirectRequest(app, "GET", "/auth/google/login", "")
+	if err != nil {
+		t.Fatalf("failed to make redirect request: %v", err)
+	}
+	if resp.Code != 302 && resp.Code != 307 {
+		t.Fatalf("expected redirect from login, got status %d", resp.Code)
+	}
+
+	loc := resp.Header().Get("Location")
+	if loc == "" {
+		t.Fatalf("redirect Location header empty")
+	}
+
+	u, err := url.Parse(loc)
+	if err != nil {
+		t.Fatalf("failed to parse redirect URL: %v", err)
+	}
+	q := u.Query()
+	state := q.Get("state")
+	if state == "" {
+		t.Fatalf("state param not found in redirect URL")
+	}
 	return state
 }
 

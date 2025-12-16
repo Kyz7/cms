@@ -8,6 +8,7 @@ import (
 	"github.com/Kyz7/cms/internal/graphql"
 	"github.com/Kyz7/cms/internal/media"
 	"github.com/Kyz7/cms/internal/middleware"
+	"github.com/Kyz7/cms/internal/project"
 	"github.com/Kyz7/cms/internal/role"
 	"github.com/Kyz7/cms/internal/search"
 	"github.com/Kyz7/cms/internal/swagger"
@@ -111,6 +112,25 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	roleGroup.Post("/assign", role.AssignRoleToUserHandler)
 
 	// ==========================================
+	// PROJECT MANAGEMENT
+	// ==========================================
+	projectGroup := app.Group("/projects")
+	projectGroup.Use(auth.JWTProtected())
+
+	// Project CRUD
+	projectGroup.Post("/", project.CreateProjectHandler)
+	projectGroup.Get("/", project.ListProjectsHandler)
+	projectGroup.Get("/:id", project.GetProjectHandler)
+	projectGroup.Put("/:id", project.UpdateProjectHandler)
+	projectGroup.Delete("/:id", project.DeleteProjectHandler)
+
+	// Project Members
+	projectGroup.Post("/:id/members", project.AddProjectMemberHandler)
+	projectGroup.Get("/:id/members", project.ListProjectMembersHandler)
+	projectGroup.Put("/:id/members/:member_id", project.UpdateProjectMemberRoleHandler)
+	projectGroup.Delete("/:id/members/:member_id", project.RemoveProjectMemberHandler)
+
+	// ==========================================
 	// CONTENT MANAGEMENT
 	// ==========================================
 	contentGroup := app.Group("/content")
@@ -137,10 +157,11 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	contentGroup.Post("/types/:content_type_id/fields",
 		middleware.PermissionProtected("ContentEntry", "update"),
 		content.AddFieldHandler)
-	contentGroup.Put("/fields/:field_id",
+	// Rute Baru (Lebih Kontekstual)
+	contentGroup.Put("/:content_type_id/fields/:field_id",
 		middleware.PermissionProtected("ContentEntry", "update"),
 		content.UpdateFieldHandler)
-	contentGroup.Delete("/fields/:field_id",
+	contentGroup.Delete("/:content_type_id/fields/:field_id",
 		middleware.PermissionProtected("ContentEntry", "delete"),
 		content.DeleteFieldHandler)
 
@@ -154,6 +175,8 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	contentGroup.Post("/:content_type_id/entries/json",
 		middleware.PermissionProtected("ContentEntry", "create"),
 		content.CreateEntryHandlerJSON)
+	contentGroup.Get("/entries", middleware.PermissionProtected("ContentEntry", "read"),
+		content.GetEntriesSemuaHandler)
 
 	// Content Entries - Single Entry Operations
 	contentGroup.Get("/entries/:entry_id",

@@ -11,6 +11,7 @@ type Role struct {
 	ID          uint           `gorm:"primaryKey" json:"id"`
 	Name        string         `gorm:"size:100;uniqueIndex" json:"name"`
 	Description string         `json:"description"`
+	IsGlobal    bool           `gorm:"default:false" json:"is_global"`
 	Permissions []Permission   `gorm:"foreignKey:RoleID" json:"permissions"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`

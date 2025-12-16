@@ -597,8 +597,16 @@ func TestPermissionFieldFiltering(t *testing.T) {
 	}
 	db.Create(ct)
 
+	// Data lengkap yang akan diuji
+	testData := map[string]interface{}{
+		"title":            "Regular Title",
+		"content":          "Main Content",
+		"author":           "Test Author",
+		"meta_title":       "SEO Meta Title",
+		"meta_description": "SEO Meta Desc",
+	}
+
 	t.Run("SEO only field scope", func(t *testing.T) {
-		// Create role with SEO-only permission
 		role := &models.Role{Name: "seo_tester", Description: "Test"}
 		db.Create(role)
 
@@ -617,20 +625,16 @@ func TestPermissionFieldFiltering(t *testing.T) {
 		}
 		db.Create(user)
 
-		// Test filtering
-		data := map[string]interface{}{
-			"title":            "Test",
-			"content":          "Content",
-			"meta_title":       "Meta Title",
-			"meta_description": "Meta Desc",
-		}
-
-		filtered, err := middleware.FilterFieldsByPermission(user.ID, "update", data, ct.ID)
+		// ⭐️ PERBAIKAN: Tambahkan 0 untuk projectID
+		filtered, err := middleware.FilterFieldsByPermission(user.ID, "update", testData, ct.ID, 0)
 		assert.NoError(t, err)
+
+		// Assertions: Hanya field SEO yang lolos
+		assert.Len(t, filtered, 2)
 		assert.NotContains(t, filtered, "title")
-		assert.NotContains(t, filtered, "content")
 		assert.Contains(t, filtered, "meta_title")
 		assert.Contains(t, filtered, "meta_description")
+		assert.Equal(t, "SEO Meta Title", filtered["meta_title"])
 	})
 
 	t.Run("Non-SEO only field scope", func(t *testing.T) {
@@ -652,10 +656,18 @@ func TestPermissionFieldFiltering(t *testing.T) {
 		}
 		db.Create(user)
 
-		// Similar test for non-SEO fields
+		// ⭐️ PERBAIKAN: Tambahkan 0 untuk projectID
+		filtered, err := middleware.FilterFieldsByPermission(user.ID, "update", testData, ct.ID, 0)
+		assert.NoError(t, err)
+
+		// Assertions: Hanya field Non-SEO (title, content, author) yang lolos
+		assert.Len(t, filtered, 3)
+		assert.Contains(t, filtered, "title")
+		assert.Contains(t, filtered, "content")
+		assert.NotContains(t, filtered, "meta_title")
 	})
 
-	t.Run("Custom allowed fields", func(t *testing.T) {
+	t.Run("Custom allowed fields (title, content)", func(t *testing.T) {
 		role := &models.Role{Name: "custom_tester", Description: "Test"}
 		db.Create(role)
 
@@ -677,13 +689,24 @@ func TestPermissionFieldFiltering(t *testing.T) {
 			RoleID: role.ID,
 		}
 		db.Create(user)
+
+		// ⭐️ PERBAIKAN: Tambahkan 0 untuk projectID
+		filtered, err := middleware.FilterFieldsByPermission(user.ID, "update", testData, ct.ID, 0)
+		assert.NoError(t, err)
+
+		// Assertions: Hanya title dan content yang lolos
+		assert.Len(t, filtered, 2)
+		assert.Contains(t, filtered, "title")
+		assert.Contains(t, filtered, "content")
+		assert.NotContains(t, filtered, "author")
+		assert.NotContains(t, filtered, "meta_title")
 	})
 
-	t.Run("Custom denied fields", func(t *testing.T) {
+	t.Run("Custom denied fields (author, meta_title)", func(t *testing.T) {
 		role := &models.Role{Name: "denied_tester", Description: "Test"}
 		db.Create(role)
 
-		deniedFields := []string{"author"}
+		deniedFields := []string{"author", "meta_title"}
 		deniedJSON, _ := json.Marshal(deniedFields)
 
 		perm := models.Permission{
@@ -701,9 +724,23 @@ func TestPermissionFieldFiltering(t *testing.T) {
 			RoleID: role.ID,
 		}
 		db.Create(user)
-	})
-}
 
+		// ⭐️ PERBAIKAN: Tambahkan 0 untuk projectID
+		filtered, err := middleware.FilterFieldsByPermission(user.ID, "update", testData, ct.ID, 0)
+		assert.NoError(t, err)
+
+		// Assertions: Semua lolos kecuali author dan meta_title (3 field lolos)
+		assert.Len(t, filtered, 3)
+		assert.Contains(t, filtered, "title")
+		assert.Contains(t, filtered, "content")
+		assert.Contains(t, filtered, "meta_description")
+		assert.NotContains(t, filtered, "author")
+		assert.NotContains(t, filtered, "meta_title")
+	})
+
+	// Anda mungkin juga ingin menambahkan test case untuk Custom Field dengan Media (misalnya "image_media_id")
+	// dan test case untuk Project Role (Module: ProjectContent, projectID > 0)
+}
 func TestContentTypeRestrictions(t *testing.T) {
 	db := database.DB
 

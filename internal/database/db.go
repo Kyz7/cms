@@ -38,6 +38,8 @@ func Migrate(db *gorm.DB) error {
 		&models.User{},
 		&models.Role{},
 		&models.Permission{},
+		&models.Project{},
+		&models.ProjectMember{},
 		&models.ContentType{},
 		&models.ContentField{},
 		&models.ContentEntry{},

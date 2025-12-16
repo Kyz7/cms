@@ -87,12 +87,36 @@ components:
               content_type_ids:
                 type: array
                 items: { type: integer }
+    CreateProjectRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+    UpdateProjectRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+    AddProjectMemberRequest:
+      type: object
+      required: [user_id, role]
+      properties:
+        user_id: { type: integer }
+        role: { type: string, enum: [owner, admin, editor, viewer] }
+    UpdateMemberRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role: { type: string, enum: [owner, admin, editor, viewer] }
     CreateContentTypeRequest:
       type: object
       required: [name, slug]
       properties:
         name: { type: string }
         slug: { type: string }
+        project_id: { type: integer, nullable: true }
     AddFieldRequest:
       type: object
       required: [name, type]
@@ -171,6 +195,7 @@ tags:
   - name: Auth
   - name: Users
   - name: Roles
+  - name: Projects
   - name: Content
   - name: Media
   - name: Workflow
@@ -240,8 +265,44 @@ paths:
       tags: [Auth]
       summary: Google OAuth callback
       security: []
+      parameters:
+        - in: query
+          name: code
+          required: true
+          schema: { type: string }
+        - in: query
+          name: state
+          required: true
+          schema: { type: string }
       responses:
-        '200': { description: OK }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string, description: JWT access token }
+                  refreshToken: { type: string, description: JWT refresh token }
+                  user:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      name: { type: string }
+                      email: { type: string }
+                      provider: { type: string }
+                      status: { type: string }
+                      roleId: { type: integer }
+                      role:
+                        type: object
+                        properties:
+                          id: { type: integer }
+                          name: { type: string }
+                          description: { type: string }
+                      createdAt: { type: string, format: date-time }
+                      updatedAt: { type: string, format: date-time }
+        '400': { description: Bad Request }
+        '500': { description: Internal Server Error }
   /auth/forgot-password:
     post:
       tags: [Auth]
@@ -386,6 +447,95 @@ paths:
       responses:
         '200': { description: OK }
 
+  /projects:
+    get:
+      tags: [Projects]
+      summary: List projects
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Projects]
+      summary: Create project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateProjectRequest' }
+      responses:
+        '201': { description: Created }
+  /projects/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [Projects]
+      summary: Get project
+      responses:
+        '200': { description: OK }
+    put:
+      tags: [Projects]
+      summary: Update project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateProjectRequest' }
+      responses:
+        '200': { description: OK }
+    delete:
+      tags: [Projects]
+      summary: Delete project
+      responses:
+        '200': { description: OK }
+  /projects/{id}/members:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [Projects]
+      summary: List project members
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Projects]
+      summary: Add project member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddProjectMemberRequest' }
+      responses:
+        '201': { description: Created }
+  /projects/{id}/members/{member_id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+      - in: path
+        name: member_id
+        required: true
+        schema: { type: integer }
+    put:
+      tags: [Projects]
+      summary: Update project member role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateMemberRoleRequest' }
+      responses:
+        '200': { description: OK }
+    delete:
+      tags: [Projects]
+      summary: Remove project member
+      responses:
+        '200': { description: OK }
+
   /content/types:
     get:
       tags: [Content]
@@ -433,6 +583,39 @@ paths:
       summary: Delete content type
       responses:
         '204': { description: No Content }
+  /content/entries:
+    get:
+      tags: [Content]
+      summary: Get all accessible content entries (Global and Project)
+      description: Retrieves all content entries where the user has either global read permission (ContentEntry:read) OR project read permission for the entry's parent project.
+      operationId: getAccessibleEntries
+      parameters:
+        - in: query 
+          name: content_type_id
+          schema:
+            type: integer
+            format: int64
+          required: false
+          description: Optional Content Type ID to filter entries by type.
+      responses:
+        '200':
+          description: List of accessible content entries retrieved successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    type: array
+        '403':
+          description: Forbidden - User lacks necessary read permissions.
+        '500':
+          description: Internal Server Error - Failed to fetch entries.
+
   /content/types/{content_type_id}/fields:
     post:
       tags: [Content]
@@ -449,10 +632,14 @@ paths:
             schema: { $ref: '#/components/schemas/AddFieldRequest' }
       responses:
         '201': { description: Created }
-  /content/fields/{field_id}:
+  /content/{content_type_id}/fields/{field_id}:
     parameters:
       - in: path
         name: field_id
+        required: true
+        schema: { type: integer }
+      - in: path
+        name: content_type_id
         required: true
         schema: { type: integer }
     put:

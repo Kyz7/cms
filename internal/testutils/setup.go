@@ -26,6 +26,8 @@ func TestDB(t *testing.T) *gorm.DB {
 		&models.User{},
 		&models.Role{},
 		&models.Permission{},
+		&models.Project{},
+		&models.ProjectMember{},
 		&models.ContentType{},
 		&models.ContentField{},
 		&models.ContentEntry{},
@@ -114,6 +116,8 @@ func CreateTestRoles(t *testing.T, db *gorm.DB) {
 	viewerPerms := []models.Permission{
 		{RoleID: viewerRole.ID, Module: "ContentEntry", Action: "read", FieldScope: "all"},
 		{RoleID: viewerRole.ID, Module: "Media", Action: "read"},
+		{RoleID: viewerRole.ID, Module: "User", Action: "read"},
+		{RoleID: viewerRole.ID, Module: "Role", Action: "read"},
 	}
 	for _, perm := range viewerPerms {
 		db.Create(&perm)
