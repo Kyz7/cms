@@ -1,0 +1,65 @@
+# Simple GraphQL Schema for CMS
+
+scalar Time
+scalar JSON
+
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type Role {
+  id: ID!
+  name: String!
+  description: String
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type ContentType {
+  id: ID!
+  name: String!
+  slug: String!
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type ContentEntry {
+  id: ID!
+  contentTypeId: Int!
+  data: JSON!
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type Query {
+  users: [User!]!
+  user(id: ID!): User
+  roles: [Role!]!
+  role(id: ID!): Role
+  contentTypes: [ContentType!]!
+  contentType(id: ID!): ContentType
+  contentEntries(contentTypeId: Int!): [ContentEntry!]!
+  contentEntry(id: ID!): ContentEntry
+}
+
+type Mutation {
+  createUser(name: String!, email: String!): User!
+  updateUser(id: ID!, name: String, email: String): User!
+  deleteUser(id: ID!): Boolean!
+  
+  createRole(name: String!, description: String): Role!
+  updateRole(id: ID!, name: String, description: String): Role!
+  deleteRole(id: ID!): Boolean!
+  
+  createContentType(name: String!, slug: String!): ContentType!
+  updateContentType(id: ID!, name: String, slug: String): ContentType!
+  deleteContentType(id: ID!): Boolean!
+  
+  createContentEntry(contentTypeId: ID!, data: JSON!): ContentEntry!
+  updateContentEntry(id: ID!, data: JSON!): ContentEntry!
+  deleteContentEntry(id: ID!): Boolean!
+}

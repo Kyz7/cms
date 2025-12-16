@@ -1,0 +1,1313 @@
+openapi: 3.0.3
+info:
+  title: CMS REST API
+  version: 1.0.0
+  description: REST API for the CMS (Auth, Users, Roles, Content, Media, Workflow, Search)
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          nullable: true
+        error:
+          type: object
+          nullable: true
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              nullable: true
+        meta:
+          type: object
+          nullable: true
+          properties:
+            page:
+              type: integer
+            limit:
+              type: integer
+            total:
+              type: integer
+            total_pages:
+              type: integer
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+    RefreshRequest:
+      type: object
+      required: [user_id, refresh_token]
+      properties:
+        user_id: { type: integer }
+        refresh_token: { type: string }
+    CreateRoleRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        permissions:
+          type: array
+          items:
+            type: object
+            properties:
+              module: { type: string }
+              action: { type: string }
+              field_scope: { type: string }
+              allowed_fields:
+                type: array
+                items: { type: string }
+              denied_fields:
+                type: array
+                items: { type: string }
+              content_type_ids:
+                type: array
+                items: { type: integer }
+    CreateProjectRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+    UpdateProjectRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+    AddProjectMemberRequest:
+      type: object
+      required: [user_id, role]
+      properties:
+        user_id: { type: integer }
+        role: { type: string, enum: [owner, admin, editor, viewer] }
+    UpdateMemberRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role: { type: string, enum: [owner, admin, editor, viewer] }
+    CreateContentTypeRequest:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        project_id: { type: integer, nullable: true }
+    AddFieldRequest:
+      type: object
+      required: [name, type]
+      properties:
+        name: { type: string }
+        type: { type: string }
+        required: { type: boolean }
+        is_seo: { type: boolean }
+        unique: { type: boolean }
+        max_length: { type: integer, nullable: true }
+        min_length: { type: integer, nullable: true }
+        pattern: { type: string, nullable: true }
+        min_value: { type: number, nullable: true }
+        max_value: { type: number, nullable: true }
+        default_value: { type: string, nullable: true }
+        placeholder: { type: string, nullable: true }
+        help_text: { type: string, nullable: true }
+    CreateRelationRequest:
+      type: object
+      required: [to_content_id, relation_type]
+      properties:
+        to_content_id: { type: integer }
+        relation_type: { type: string }
+    ChangeStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string }
+        comment: { type: string }
+    AssignEntryRequest:
+      type: object
+      required: [assigned_to]
+      properties:
+        assigned_to: { type: integer }
+        due_date: { type: string, format: date-time, nullable: true }
+    SearchAdvancedRequest:
+      type: object
+      properties:
+        query: { type: string }
+        content_type_ids: { type: array, items: { type: integer } }
+        fields: { type: array, items: { type: string } }
+        status: { type: string }
+        created_by: { type: integer }
+        tags: { type: array, items: { type: string } }
+        from_date: { type: string }
+        to_date: { type: string }
+        filters: { type: object }
+        page: { type: integer }
+        limit: { type: integer }
+        sort_by: { type: string }
+        order_by: { type: string }
+    BulkSearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query: { type: string }
+        content_type_ids: { type: array, items: { type: integer } }
+        limit: { type: integer }
+        group_by_type: { type: boolean }
+    TranslateEntryRequest:
+      type: object
+      properties:
+        target_lang:
+          type: string
+          description: Target language code (e.g., "en", "id"). If omitted, inferred from Accept-Language header.
+        source_lang:
+          type: string
+          description: Source language code; if omitted, auto-detected by Google Translate.
+        fields:
+          type: array
+          description: Specific fields to translate; if empty or omitted, translates all string fields.
+          items: { type: string }
+
+tags:
+  - name: Health
+  - name: Auth
+  - name: Users
+  - name: Roles
+  - name: Projects
+  - name: Content
+  - name: Media
+  - name: Workflow
+  - name: Search
+  - name: Translation
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: OK
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201': { description: Created }
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200': { description: OK }
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '200': { description: OK }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout
+      responses:
+        '200': { description: OK }
+  /auth/google/login:
+    get:
+      tags: [Auth]
+      summary: Start Google OAuth
+      security: []
+      responses:
+        '302': { description: Redirect }
+  /auth/google/callback:
+    get:
+      tags: [Auth]
+      summary: Google OAuth callback
+      security: []
+      parameters:
+        - in: query
+          name: code
+          required: true
+          schema: { type: string }
+        - in: query
+          name: state
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string, description: JWT access token }
+                  refreshToken: { type: string, description: JWT refresh token }
+                  user:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      name: { type: string }
+                      email: { type: string }
+                      provider: { type: string }
+                      status: { type: string }
+                      roleId: { type: integer }
+                      role:
+                        type: object
+                        properties:
+                          id: { type: integer }
+                          name: { type: string }
+                          description: { type: string }
+                      createdAt: { type: string, format: date-time }
+                      updatedAt: { type: string, format: date-time }
+        '400': { description: Bad Request }
+        '500': { description: Internal Server Error }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Forgot password
+      security: []
+      responses:
+        '200': { description: OK }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Reset password
+      security: []
+      responses:
+        '200': { description: OK }
+
+  /users:
+    get:
+      tags: [Users]
+      summary: List users
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Users]
+      summary: Create user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string }
+                email: { type: string }
+                password: { type: string }
+                role_id: { type: integer }
+      responses:
+        '201': { description: Created }
+  /users/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [Users]
+      summary: Get user
+      responses:
+        '200': { description: OK }
+    put:
+      tags: [Users]
+      summary: Update user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                email: { type: string }
+                role_id: { type: integer }
+      responses:
+        '200': { description: OK }
+    delete:
+      tags: [Users]
+      summary: Delete user
+      responses:
+        '204': { description: No Content }
+
+  /roles:
+    get:
+      tags: [Roles]
+      summary: List roles
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Roles]
+      summary: Create role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRoleRequest' }
+      responses:
+        '201': { description: Created }
+  /roles/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [Roles]
+      summary: Get role
+      responses:
+        '200': { description: OK }
+    put:
+      tags: [Roles]
+      summary: Update role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRoleRequest' }
+      responses:
+        '200': { description: OK }
+    delete:
+      tags: [Roles]
+      summary: Delete role
+      responses:
+        '204': { description: No Content }
+  /roles/{id}/duplicate:
+    post:
+      tags: [Roles]
+      summary: Duplicate role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '201': { description: Created }
+  /roles/assign:
+    post:
+      tags: [Roles]
+      summary: Assign role to user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, role_id]
+              properties:
+                user_id: { type: integer }
+                role_id: { type: integer }
+      responses:
+        '200': { description: OK }
+
+  /projects:
+    get:
+      tags: [Projects]
+      summary: List projects
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Projects]
+      summary: Create project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateProjectRequest' }
+      responses:
+        '201': { description: Created }
+  /projects/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [Projects]
+      summary: Get project
+      responses:
+        '200': { description: OK }
+    put:
+      tags: [Projects]
+      summary: Update project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateProjectRequest' }
+      responses:
+        '200': { description: OK }
+    delete:
+      tags: [Projects]
+      summary: Delete project
+      responses:
+        '200': { description: OK }
+  /projects/{id}/members:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [Projects]
+      summary: List project members
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Projects]
+      summary: Add project member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddProjectMemberRequest' }
+      responses:
+        '201': { description: Created }
+  /projects/{id}/members/{member_id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+      - in: path
+        name: member_id
+        required: true
+        schema: { type: integer }
+    put:
+      tags: [Projects]
+      summary: Update project member role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateMemberRoleRequest' }
+      responses:
+        '200': { description: OK }
+    delete:
+      tags: [Projects]
+      summary: Remove project member
+      responses:
+        '200': { description: OK }
+
+  /content/types:
+    get:
+      tags: [Content]
+      summary: List content types
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Content]
+      summary: Create content type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateContentTypeRequest' }
+      responses:
+        '201': { description: Created }
+  /content/types/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [Content]
+      summary: Get content type
+      responses:
+        '200': { description: OK }
+    put:
+      tags: [Content]
+      summary: Update content type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                slug: { type: string }
+                enable_seo: { type: boolean }
+      responses:
+        '200': { description: OK }
+    delete:
+      tags: [Content]
+      summary: Delete content type
+      responses:
+        '204': { description: No Content }
+  /content/entries:
+    get:
+      tags: [Content]
+      summary: Get all accessible content entries (Global and Project)
+      description: Retrieves all content entries where the user has either global read permission (ContentEntry:read) OR project read permission for the entry's parent project.
+      operationId: getAccessibleEntries
+      parameters:
+        - in: query 
+          name: content_type_id
+          schema:
+            type: integer
+            format: int64
+          required: false
+          description: Optional Content Type ID to filter entries by type.
+      responses:
+        '200':
+          description: List of accessible content entries retrieved successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    type: array
+        '403':
+          description: Forbidden - User lacks necessary read permissions.
+        '500':
+          description: Internal Server Error - Failed to fetch entries.
+
+  /content/types/{content_type_id}/fields:
+    post:
+      tags: [Content]
+      summary: Add field to content type
+      parameters:
+        - in: path
+          name: content_type_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddFieldRequest' }
+      responses:
+        '201': { description: Created }
+  /content/{content_type_id}/fields/{field_id}:
+    parameters:
+      - in: path
+        name: field_id
+        required: true
+        schema: { type: integer }
+      - in: path
+        name: content_type_id
+        required: true
+        schema: { type: integer }
+    put:
+      tags: [Content]
+      summary: Update field
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddFieldRequest' }
+      responses:
+        '200': { description: OK }
+    delete:
+      tags: [Content]
+      summary: Delete field
+      responses:
+        '204': { description: No Content }
+
+  /content/{content_type_id}/entries:
+    get:
+      tags: [Content]
+      summary: List entries by content type
+      parameters:
+        - in: path
+          name: content_type_id
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: created_by
+          schema: { type: integer }
+        - in: query
+          name: from
+          schema: { type: string }
+        - in: query
+          name: to
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Content]
+      summary: Create entry (JSON or multipart)
+      parameters:
+        - in: path
+          name: content_type_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+          multipart/form-data:
+            schema:
+              type: object
+      responses:
+        '201': { description: Created }
+  /content/{content_type_id}/entries/json:
+    post:
+      tags: [Content]
+      summary: Create entry (JSON-only variant)
+      parameters:
+        - in: path
+          name: content_type_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': { description: OK }
+
+  /content/entries/{entry_id}:
+    parameters:
+      - in: path
+        name: entry_id
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [Content]
+      summary: Get entry
+      responses:
+        '200': { description: OK }
+    put:
+      tags: [Content]
+      summary: Update entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+          multipart/form-data:
+            schema:
+              type: object
+      responses:
+        '200': { description: OK }
+    delete:
+      tags: [Content]
+      summary: Delete entry
+      responses:
+        '204': { description: No Content }
+
+  /content/entries/{entry_id}/seo-preview:
+    get:
+      tags: [Content]
+      summary: SEO preview
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+
+  /content/entries/{entry_id}/translate:
+    post:
+      tags: [Translation]
+      summary: Translate entry fields and store under _i18n[target_lang]
+      description: |
+        Translates selected string fields of an entry to the target language and saves them under the `_i18n[target_lang]` map within the entry data. If `target_lang` is omitted in the body, it will be inferred from the `Accept-Language` header (first language tag, primary subtag).
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema: { type: integer }
+        - in: header
+          name: Accept-Language
+          required: false
+          schema: { type: string }
+          description: Used to infer `target_lang` when not provided in the body.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TranslateEntryRequest' }
+      responses:
+        '200': { description: OK }
+
+  /content/{from_content_id}/relations:
+    get:
+      tags: [Content]
+      summary: List relations
+      parameters:
+        - in: path
+          name: from_content_id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Content]
+      summary: Create relation
+      parameters:
+        - in: path
+          name: from_content_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRelationRequest' }
+      responses:
+        '201': { description: Created }
+  /content/relations/{relation_id}:
+    delete:
+      tags: [Content]
+      summary: Delete relation
+      parameters:
+        - in: path
+          name: relation_id
+          required: true
+          schema: { type: integer }
+      responses:
+        '204': { description: No Content }
+
+  /content/types/{id}/api-reference:
+    get:
+      tags: [Content]
+      summary: Generate API reference for content type
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /content/types/{id}/openapi:
+    get:
+      tags: [Content]
+      summary: Generate OpenAPI for content type
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /content/types/{id}/docs/markdown:
+    get:
+      tags: [Content]
+      summary: Generate Markdown docs for content type
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+
+  /media/folders:
+    get:
+      tags: [Media]
+      summary: List folders
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Media]
+      summary: Create folder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                parent_id: { type: integer, nullable: true }
+      responses:
+        '201': { description: Created }
+  /media/upload:
+    post:
+      tags: [Media]
+      summary: Upload media
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                folder: { type: string }
+                alt: { type: string }
+                caption: { type: string }
+                tags: { type: string, description: JSON array string }
+      responses:
+        '201': { description: Created }
+  /media/bulk-upload:
+    post:
+      tags: [Media]
+      summary: Bulk upload
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                folder: { type: string }
+      responses:
+        '201': { description: Created }
+  /media:
+    get:
+      tags: [Media]
+      summary: List media
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: type
+          schema: { type: string }
+        - in: query
+          name: folder
+          schema: { type: string }
+        - in: query
+          name: search
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /media/search:
+    get:
+      tags: [Media]
+      summary: Search media
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /media/stats:
+    get:
+      tags: [Media]
+      summary: Media stats
+      responses:
+        '200': { description: OK }
+  /media/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [Media]
+      summary: Get media
+      responses:
+        '200': { description: OK }
+    put:
+      tags: [Media]
+      summary: Update media metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                alt: { type: string }
+                caption: { type: string }
+                folder: { type: string }
+                tags:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200': { description: OK }
+    delete:
+      tags: [Media]
+      summary: Delete media
+      responses:
+        '204': { description: No Content }
+
+  /workflow/entries/{entry_id}/status:
+    post:
+      tags: [Workflow]
+      summary: Change status
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangeStatusRequest' }
+      responses:
+        '200': { description: OK }
+  /workflow/entries/{entry_id}/request-review:
+    post:
+      tags: [Workflow]
+      summary: Request review
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /workflow/entries/{entry_id}/approve:
+    post:
+      tags: [Workflow]
+      summary: Approve entry
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /workflow/entries/{entry_id}/reject:
+    post:
+      tags: [Workflow]
+      summary: Reject entry
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [comment]
+              properties:
+                comment: { type: string }
+      responses:
+        '200': { description: OK }
+  /workflow/entries/{entry_id}/publish:
+    post:
+      tags: [Workflow]
+      summary: Publish entry
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /workflow/entries/{entry_id}/history:
+    get:
+      tags: [Workflow]
+      summary: Get history
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /workflow/entries/{entry_id}/comments:
+    get:
+      tags: [Workflow]
+      summary: Get comments
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: include_private
+          schema: { type: boolean }
+      responses:
+        '200': { description: OK }
+    post:
+      tags: [Workflow]
+      summary: Add comment
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [comment]
+              properties:
+                comment: { type: string }
+                is_private: { type: boolean }
+      responses:
+        '201': { description: Created }
+  /workflow/entries/{entry_id}/assign:
+    post:
+      tags: [Workflow]
+      summary: Assign entry
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssignEntryRequest' }
+      responses:
+        '201': { description: Created }
+  /workflow/assignments:
+    get:
+      tags: [Workflow]
+      summary: My assignments
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /workflow/assignments/{assignment_id}/complete:
+    put:
+      tags: [Workflow]
+      summary: Complete assignment
+      parameters:
+        - in: path
+          name: assignment_id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /workflow/content-types/{content_type_id}/entries:
+    get:
+      tags: [Workflow]
+      summary: Entries by status
+      parameters:
+        - in: path
+          name: content_type_id
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /workflow/content-types/{content_type_id}/stats:
+    get:
+      tags: [Workflow]
+      summary: Workflow stats
+      parameters:
+        - in: path
+          name: content_type_id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+
+  /search/entries:
+    get:
+      tags: [Search]
+      summary: Full-text search entries
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: sort_by
+          schema: { type: string }
+        - in: query
+          name: order_by
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string }
+        - in: query
+          name: to
+          schema: { type: string }
+        - in: query
+          name: content_type_ids
+          schema: { type: string, description: comma separated }
+        - in: query
+          name: fields
+          schema: { type: string, description: comma separated }
+        - in: query
+          name: tags
+          schema: { type: string, description: comma separated }
+        - in: query
+          name: created_by
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /search/advanced:
+    post:
+      tags: [Search]
+      summary: Advanced search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SearchAdvancedRequest' }
+      responses:
+        '200': { description: OK }
+  /search/facets:
+    get:
+      tags: [Search]
+      summary: Get facets
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: content_type_ids
+          schema: { type: string, description: comma separated }
+      responses:
+        '200': { description: OK }
+  /search/autocomplete:
+    get:
+      tags: [Search]
+      summary: Autocomplete
+      parameters:
+        - in: query
+          name: field
+          required: true
+          schema: { type: string }
+        - in: query
+          name: prefix
+          required: true
+          schema: { type: string }
+        - in: query
+          name: content_type_id
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+      responses:
+        '200': { description: OK }
+  /search/entries/{entry_id}/related:
+    get:
+      tags: [Search]
+      summary: Search related by relation
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: type
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /search/bulk:
+    post:
+      tags: [Search]
+      summary: Bulk search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkSearchRequest' }
+      responses:
+        '200': { description: OK }
+  /search/export:
+    get:
+      tags: [Search]
+      summary: Export search results
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: sort_by
+          schema: { type: string }
+        - in: query
+          name: order_by
+          schema: { type: string }
+        - in: query
+          name: format
+          schema: { type: string, enum: [json, csv] }
+      responses:
+        '200': { description: OK }

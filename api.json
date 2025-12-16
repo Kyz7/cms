@@ -1,0 +1,751 @@
+{
+  "info": {
+    "name": "CMS REST API",
+    "_postman_id": "11111111-2222-3333-4444-555555555555",
+    "description": "Postman collection for CMS REST API endpoints (Auth, Users, Roles, Content, Media, Workflow, Search, Health)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "access_token", "value": "" },
+    { "key": "refresh_token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [ {"key": "Content-Type", "value": "application/json"} ],
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth","register"] },
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"}
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [ {"key": "Content-Type", "value": "application/json"} ],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth","login"] },
+            "body": {"mode": "raw", "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"}
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [ {"key": "Content-Type", "value": "application/json"} ],
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth","refresh"] },
+            "body": {"mode": "raw", "raw": "{\n  \"user_id\": 1,\n  \"refresh_token\": \"{{refresh_token}}\"\n}"}
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth","logout"] }
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [ {"key": "Content-Type", "value": "application/json"} ],
+            "url": { "raw": "{{baseUrl}}/auth/forgot-password", "host": ["{{baseUrl}}"], "path": ["auth","forgot-password"] },
+            "body": {"mode": "raw", "raw": "{\n  \"email\": \"test@example.com\"\n}"}
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [ {"key": "Content-Type", "value": "application/json"} ],
+            "url": { "raw": "{{baseUrl}}/auth/reset-password", "host": ["{{baseUrl}}"], "path": ["auth","reset-password"] },
+            "body": {"mode": "raw", "raw": "{\n  \"token\": \"PASTE_TOKEN\",\n  \"new_password\": \"newPass123\"\n}"}
+          }
+        },
+        {
+          "name": "Google Login (start)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/auth/google/login", "host": ["{{baseUrl}}"], "path": ["auth","google","login"] }
+          }
+        },
+        {
+          "name": "Google Callback",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/auth/google/callback?code=YOUR_CODE", "host": ["{{baseUrl}}"], "path": ["auth","google","callback"], "query": [{"key":"code","value":"YOUR_CODE"}] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users (admin)",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] }
+          }
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] },
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"New User\",\n  \"email\": \"new@example.com\",\n  \"password\": \"password123\",\n  \"role_id\": 2\n}"}
+          }
+        },
+        {
+          "name": "Get User",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/users/1", "host": ["{{baseUrl}}"], "path": ["users","1"] }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/users/1", "host": ["{{baseUrl}}"], "path": ["users","1"] },
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Updated Name\",\n  \"email\": \"updated@example.com\",\n  \"role_id\": 2\n}"}
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/users/1", "host": ["{{baseUrl}}"], "path": ["users","1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Roles (admin)",
+      "item": [
+        {
+          "name": "List Roles",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/roles", "host": ["{{baseUrl}}"], "path": ["roles"] }
+          }
+        },
+        {
+          "name": "Create Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/roles", "host": ["{{baseUrl}}"], "path": ["roles"] },
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"SEO Specialist\",\n  \"description\": \"Can only manage SEO settings\",\n  \"permissions\": [\n    { \"module\": \"SEO\", \"action\": \"update\" }\n  ]\n}"}
+          }
+        },
+        {
+          "name": "Get Role",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/roles/1", "host": ["{{baseUrl}}"], "path": ["roles","1"] }
+          }
+        },
+        {
+          "name": "Update Role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/roles/1", "host": ["{{baseUrl}}"], "path": ["roles","1"] },
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Editor\",\n  \"description\": \"Editor role\",\n  \"permissions\": []\n}"}
+          }
+        },
+        {
+          "name": "Delete Role",
+          "request": {
+            "method": "DELETE",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/roles/1", "host": ["{{baseUrl}}"], "path": ["roles","1"] }
+          }
+        },
+        {
+          "name": "Duplicate Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/roles/1/duplicate", "host": ["{{baseUrl}}"], "path": ["roles","1","duplicate"] },
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Editor Copy\"\n}"}
+          }
+        },
+        {
+          "name": "Assign Role to User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/roles/assign", "host": ["{{baseUrl}}"], "path": ["roles","assign"] },
+            "body": {"mode": "raw", "raw": "{\n  \"user_id\": 1,\n  \"role_id\": 2\n}"}
+          }
+        }
+      ]
+    },
+    {
+      "name": "Content",
+      "item": [
+        {
+          "name": "Create Content Type",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/content/types", "host": ["{{baseUrl}}"], "path": ["content","types"] },
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Article\",\n  \"slug\": \"article\"\n}"}
+          }
+        },
+        {
+          "name": "List Content Types",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/content/types", "host": ["{{baseUrl}}"], "path": ["content","types"] }
+          }
+        },
+        {
+          "name": "Get Content Type",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/content/types/1", "host": ["{{baseUrl}}"], "path": ["content","types","1"] }
+          }
+        },
+        {
+          "name": "Update Content Type",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/content/types/1", "host": ["{{baseUrl}}"], "path": ["content","types","1"] },
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Article\",\n  \"slug\": \"article\",\n  \"enable_seo\": true\n}"}
+          }
+        },
+        {
+          "name": "Delete Content Type",
+          "request": {
+            "method": "DELETE",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/content/types/1", "host": ["{{baseUrl}}"], "path": ["content","types","1"] }
+          }
+        },
+        {
+          "name": "Add Field",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/content/types/1/fields", "host": ["{{baseUrl}}"], "path": ["content","types","1","fields"] },
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"title\",\n  \"type\": \"string\",\n  \"required\": true\n}"}
+          }
+        },
+        {
+          "name": "Update Field",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/content/fields/1", "host": ["{{baseUrl}}"], "path": ["content","fields","1"] },
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"title\",\n  \"type\": \"string\",\n  \"required\": true,\n  \"is_seo\": false\n}"}
+          }
+        },
+        {
+          "name": "Delete Field",
+          "request": {
+            "method": "DELETE",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/content/fields/1", "host": ["{{baseUrl}}"], "path": ["content","fields","1"] }
+          }
+        },
+        {
+          "name": "Create Entry (JSON or multipart)",
+          "request": {
+            "method": "POST",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/content/1/entries", "host": ["{{baseUrl}}"], "path": ["content","1","entries"] },
+            "body": {"mode": "raw", "raw": "{\n  \"title\": \"Test Article\",\n  \"slug\": \"test-article\"\n}"}
+          }
+        },
+        {
+          "name": "Create Entry (JSON media id)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/content/1/entries/json", "host": ["{{baseUrl}}"], "path": ["content","1","entries","json"] },
+            "body": {"mode": "raw", "raw": "{\n  \"title\": \"Test Article\",\n  \"hero_image_media_id\": 1\n}"}
+          }
+        },
+        {
+          "name": "List Entries",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/content/1/entries", "host": ["{{baseUrl}}"], "path": ["content","1","entries"] }
+          }
+        },
+        {
+          "name": "Get Entry",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/content/entries/1", "host": ["{{baseUrl}}"], "path": ["content","entries","1"] }
+          }
+        },
+        {
+          "name": "Update Entry",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/content/entries/1", "host": ["{{baseUrl}}"], "path": ["content","entries","1"] },
+            "body": {"mode": "raw", "raw": "{\n  \"title\": \"Updated\"\n}"}
+          }
+        },
+        {
+          "name": "Delete Entry",
+          "request": {
+            "method": "DELETE",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/content/entries/1", "host": ["{{baseUrl}}"], "path": ["content","entries","1"] }
+          }
+        },
+        {
+          "name": "SEO Preview",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/content/entries/1/seo-preview", "host": ["{{baseUrl}}"], "path": ["content","entries","1","seo-preview"] }
+          }
+        },
+        {
+          "name": "Create Relation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/content/1/relations", "host": ["{{baseUrl}}"], "path": ["content","1","relations"] },
+            "body": {"mode": "raw", "raw": "{\n  \"to_content_id\": 2,\n  \"relation_type\": \"related\"\n}"}
+          }
+        },
+        {
+          "name": "List Relations",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/content/1/relations", "host": ["{{baseUrl}}"], "path": ["content","1","relations"] }
+          }
+        },
+        {
+          "name": "Delete Relation",
+          "request": {
+            "method": "DELETE",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/content/relations/1", "host": ["{{baseUrl}}"], "path": ["content","relations","1"] }
+          }
+        },
+        {
+          "name": "API Reference (by Content Type)",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/content/types/1/api-reference", "host": ["{{baseUrl}}"], "path": ["content","types","1","api-reference"] }
+          }
+        },
+        {
+          "name": "OpenAPI Spec (by Content Type)",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/content/types/1/openapi", "host": ["{{baseUrl}}"], "path": ["content","types","1","openapi"] }
+          }
+        },
+        {
+          "name": "Markdown Docs (by Content Type)",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/content/types/1/docs/markdown", "host": ["{{baseUrl}}"], "path": ["content","types","1","docs","markdown"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Media",
+      "item": [
+        {
+          "name": "List Folders",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/media/folders", "host": ["{{baseUrl}}"], "path": ["media","folders"] }
+          }
+        },
+        {
+          "name": "Create Folder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/media/folders", "host": ["{{baseUrl}}"], "path": ["media","folders"] },
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"images\"\n}"}
+          }
+        },
+        {
+          "name": "Upload Media",
+          "request": {
+            "method": "POST",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/media/upload", "host": ["{{baseUrl}}"], "path": ["media","upload"] },
+            "body": {"mode": "formdata", "formdata": [ {"key": "file", "type": "file"}, {"key":"folder","value":"/"} ]}
+          }
+        },
+        {
+          "name": "Bulk Upload Media",
+          "request": {
+            "method": "POST",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/media/bulk-upload", "host": ["{{baseUrl}}"], "path": ["media","bulk-upload"] },
+            "body": {"mode": "formdata", "formdata": [ {"key": "files", "type": "file"} ]}
+          }
+        },
+        {
+          "name": "List Media",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/media?limit=20", "host": ["{{baseUrl}}"], "path": ["media"], "query":[{"key":"limit","value":"20"}] }
+          }
+        },
+        {
+          "name": "Search Media",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/media/search?q=logo", "host": ["{{baseUrl}}"], "path": ["media","search"], "query":[{"key":"q","value":"logo"}] }
+          }
+        },
+        {
+          "name": "Media Stats",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/media/stats", "host": ["{{baseUrl}}"], "path": ["media","stats"] }
+          }
+        },
+        {
+          "name": "Get Media",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/media/1", "host": ["{{baseUrl}}"], "path": ["media","1"] }
+          }
+        },
+        {
+          "name": "Update Media",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/media/1", "host": ["{{baseUrl}}"], "path": ["media","1"] },
+            "body": {"mode": "raw", "raw": "{\n  \"alt\": \"Logo\",\n  \"caption\": \"Company logo\",\n  \"folder\": \"/\",\n  \"tags\": [\"brand\"]\n}"}
+          }
+        },
+        {
+          "name": "Delete Media",
+          "request": {
+            "method": "DELETE",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/media/1", "host": ["{{baseUrl}}"], "path": ["media","1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workflow",
+      "item": [
+        {
+          "name": "Change Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/workflow/entries/1/status", "host": ["{{baseUrl}}"], "path": ["workflow","entries","1","status"] },
+            "body": {"mode": "raw", "raw": "{\n  \"status\": \"in_review\",\n  \"comment\": \"Ready for review\"\n}"}
+          }
+        },
+        {
+          "name": "Request Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/workflow/entries/1/request-review", "host": ["{{baseUrl}}"], "path": ["workflow","entries","1","request-review"] },
+            "body": {"mode": "raw", "raw": "{\n  \"comment\": \"Please review\"\n}"}
+          }
+        },
+        {
+          "name": "Approve Entry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/workflow/entries/1/approve", "host": ["{{baseUrl}}"], "path": ["workflow","entries","1","approve"] },
+            "body": {"mode": "raw", "raw": "{\n  \"comment\": \"Looks good\"\n}"}
+          }
+        },
+        {
+          "name": "Reject Entry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/workflow/entries/1/reject", "host": ["{{baseUrl}}"], "path": ["workflow","entries","1","reject"] },
+            "body": {"mode": "raw", "raw": "{\n  \"comment\": \"Needs changes\"\n}"}
+          }
+        },
+        {
+          "name": "Publish Entry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/workflow/entries/1/publish", "host": ["{{baseUrl}}"], "path": ["workflow","entries","1","publish"] },
+            "body": {"mode": "raw", "raw": "{\n  \"comment\": \"Publishing\"\n}"}
+          }
+        },
+        {
+          "name": "Get History",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/workflow/entries/1/history", "host": ["{{baseUrl}}"], "path": ["workflow","entries","1","history"] }
+          }
+        },
+        {
+          "name": "Add Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/workflow/entries/1/comments", "host": ["{{baseUrl}}"], "path": ["workflow","entries","1","comments"] },
+            "body": {"mode": "raw", "raw": "{\n  \"comment\": \"Great work\",\n  \"is_private\": false\n}"}
+          }
+        },
+        {
+          "name": "Get Comments",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/workflow/entries/1/comments", "host": ["{{baseUrl}}"], "path": ["workflow","entries","1","comments"] }
+          }
+        },
+        {
+          "name": "Assign Entry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/workflow/entries/1/assign", "host": ["{{baseUrl}}"], "path": ["workflow","entries","1","assign"] },
+            "body": {"mode": "raw", "raw": "{\n  \"assigned_to\": 2\n}"}
+          }
+        },
+        {
+          "name": "My Assignments",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/workflow/assignments", "host": ["{{baseUrl}}"], "path": ["workflow","assignments"] }
+          }
+        },
+        {
+          "name": "Complete Assignment",
+          "request": {
+            "method": "PUT",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/workflow/assignments/1/complete", "host": ["{{baseUrl}}"], "path": ["workflow","assignments","1","complete"] }
+          }
+        },
+        {
+          "name": "Entries by Status",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/workflow/content-types/1/entries?status=draft", "host": ["{{baseUrl}}"], "path": ["workflow","content-types","1","entries"], "query":[{"key":"status","value":"draft"}] }
+          }
+        },
+        {
+          "name": "Workflow Stats",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/workflow/content-types/1/stats", "host": ["{{baseUrl}}"], "path": ["workflow","content-types","1","stats"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Search",
+      "item": [
+        {
+          "name": "Full-text Search",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": {
+              "raw": "{{baseUrl}}/search/entries?q=test&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["search","entries"],
+              "query": [
+                {"key":"q","value":"test"},
+                {"key":"page","value":"1"},
+                {"key":"limit","value":"10"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Advanced Search",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/search/advanced", "host": ["{{baseUrl}}"], "path": ["search","advanced"] },
+            "body": {"mode": "raw", "raw": "{\n  \"query\": \"test\",\n  \"page\": 1,\n  \"limit\": 10\n}"}
+          }
+        },
+        {
+          "name": "Facets",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/search/facets?q=test", "host": ["{{baseUrl}}"], "path": ["search","facets"], "query":[{"key":"q","value":"test"}] }
+          }
+        },
+        {
+          "name": "Autocomplete",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": {
+              "raw": "{{baseUrl}}/search/autocomplete?field=title&prefix=te&content_type_id=1&limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["search","autocomplete"],
+              "query": [
+                {"key":"field","value":"title"},
+                {"key":"prefix","value":"te"},
+                {"key":"content_type_id","value":"1"},
+                {"key":"limit","value":"5"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Related Entries",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/search/entries/1/related?type=related", "host": ["{{baseUrl}}"], "path": ["search","entries","1","related"], "query":[{"key":"type","value":"related"}] }
+          }
+        },
+        {
+          "name": "Bulk Search",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": { "raw": "{{baseUrl}}/search/bulk", "host": ["{{baseUrl}}"], "path": ["search","bulk"] },
+            "body": {"mode": "raw", "raw": "{\n  \"query\": \"test\",\n  \"content_type_ids\": [1],\n  \"limit\": 5,\n  \"group_by_type\": true\n}"}
+          }
+        },
+        {
+          "name": "Export Results (JSON)",
+          "request": {
+            "method": "GET",
+            "header": [ {"key": "Authorization", "value": "Bearer {{access_token}}"} ],
+            "url": { "raw": "{{baseUrl}}/search/export?q=test&format=json", "host": ["{{baseUrl}}"], "path": ["search","export"], "query":[{"key":"q","value":"test"},{"key":"format","value":"json"}] }
+          }
+        }
+      ]
+    }
+  ]
+}
