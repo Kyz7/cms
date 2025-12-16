@@ -70,6 +70,7 @@ components:
       properties:
         name: { type: string }
         description: { type: string }
+        is_global: { type: boolean }
         permissions:
           type: array
           items:
