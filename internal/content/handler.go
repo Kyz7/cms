@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"mime/multipart"
+	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Kyz7/cms/internal/database"
 	"github.com/Kyz7/cms/internal/globals"
@@ -483,6 +485,76 @@ func SEOPreviewHandler(c *fiber.Ctx) error {
 	}
 
 	return response.Success(c, seoData, "SEO preview generated successfully")
+}
+
+// GeneratePreviewTokenHandler issues a signed preview token and URL for live preview.
+// Requires authenticated user with ContentEntry:read permission.
+func GeneratePreviewTokenHandler(c *fiber.Ctx) error {
+	entryID, err := c.ParamsInt("entry_id")
+	if err != nil || entryID <= 0 {
+		return response.BadRequest(c, "Invalid or missing Content Entry ID", nil)
+	}
+
+	var entry models.ContentEntry
+	if err := database.DB.First(&entry, entryID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return response.NotFound(c, "Entry")
+		}
+		return response.InternalError(c, "Failed to fetch entry")
+	}
+
+	token, expiresAt, err := GenerateEntryPreviewToken(entry)
+	if err != nil {
+		return response.InternalError(c, fmt.Sprintf("Failed to generate preview token: %s", err.Error()))
+	}
+
+	backendURL := BuildPreviewURL(c.BaseURL(), entry.ID, token)
+	frontendURL := os.Getenv("PREVIEW_FRONTEND_URL")
+	if frontendURL != "" {
+		frontendURL = BuildPreviewURL(frontendURL, entry.ID, token)
+	}
+
+	return response.Success(c, fiber.Map{
+		"token":                token,
+		"expires_at":           expiresAt.Format(time.RFC3339),
+		"preview_url":          backendURL,
+		"frontend_preview_url": frontendURL,
+	}, "Preview token generated")
+}
+
+// PreviewEntryHandler returns full content entry using preview token (no Bearer auth required).
+func PreviewEntryHandler(c *fiber.Ctx) error {
+	entryID, err := c.ParamsInt("entry_id")
+	if err != nil || entryID <= 0 {
+		return response.BadRequest(c, "Invalid or missing Content Entry ID", nil)
+	}
+
+	token := c.Query("token")
+	if token == "" {
+		token = c.Get("X-Preview-Token")
+	}
+	if token == "" {
+		return response.BadRequest(c, "Preview token is required", nil)
+	}
+
+	claims, err := ParsePreviewToken(token)
+	if err != nil {
+		return response.Unauthorized(c, fmt.Sprintf("Invalid preview token: %s", err.Error()))
+	}
+
+	if claims.EntryID != uint(entryID) {
+		return response.Unauthorized(c, "Preview token does not match entry")
+	}
+
+	var entry models.ContentEntry
+	if err := database.DB.Preload("ContentType").First(&entry, entryID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return response.NotFound(c, "Entry")
+		}
+		return response.InternalError(c, "Failed to fetch entry")
+	}
+
+	return response.Success(c, entry, "Preview entry retrieved")
 }
 
 func UpdateEntryHandler(c *fiber.Ctx) error {

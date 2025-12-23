@@ -169,6 +169,35 @@ func generateAPIReference(ct models.ContentType, baseURL string) APIReference {
 				"body":   nil,
 			},
 		},
+		{
+			Method:      "POST",
+			Path:        "/content/entries/{entry_id}/preview-token",
+			Description: fmt.Sprintf("Generate preview token for a %s entry", ct.Name),
+			Auth:        true,
+			Permission:  "ContentEntry:read",
+			Parameters: map[string]interface{}{
+				"entry_id": map[string]interface{}{"type": "integer", "required": true, "in": "path"},
+			},
+			Response: map[string]interface{}{
+				"status": 200,
+				"body": map[string]interface{}{
+					"token":       "<signed_token>",
+					"expires_at":  "2025-01-01T00:00:00Z",
+					"preview_url": "/content/entries/{entry_id}/preview?token=...",
+				},
+			},
+		},
+		{
+			Method:      "GET",
+			Path:        "/content/entries/{entry_id}/preview",
+			Description: fmt.Sprintf("Get full preview for a %s entry using preview token", ct.Name),
+			Auth:        false,
+			Parameters: map[string]interface{}{
+				"entry_id": map[string]interface{}{"type": "integer", "required": true, "in": "path"},
+				"token":    map[string]interface{}{"type": "string", "required": true, "in": "query"},
+			},
+			Response: generateResponseExample(ct, "single"),
+		},
 	}
 
 	if ct.EnableSEO {

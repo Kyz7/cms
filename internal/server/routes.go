@@ -198,6 +198,11 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	contentGroup.Get("/entries/:entry_id/seo-preview",
 		middleware.PermissionProtected("SEO", "read"),
 		content.SEOPreviewHandler)
+	contentGroup.Post("/entries/:entry_id/preview-token",
+		middleware.PermissionProtected("ContentEntry", "read"),
+		content.GeneratePreviewTokenHandler)
+	contentGroup.Get("/entries/:entry_id/preview",
+		content.PreviewEntryHandler)
 
 	// Relations
 	contentGroup.Post("/:from_content_id/relations",
