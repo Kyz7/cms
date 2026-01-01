@@ -34,7 +34,8 @@ func ValidateRefreshToken(userID uint, token string) bool {
 	hash := HashToken(token)
 
 	result := database.DB.Model(&models.RefreshToken{}).
-		Where("user_id = ? AND token_hash = ? AND revoked = false", userID, hash).
+		Where("user_id = ? AND token_hash = ? AND revoked = false AND expires_at > ?",
+			userID, hash, time.Now()).
 		Update("revoked", true)
 
 	return result.RowsAffected == 1

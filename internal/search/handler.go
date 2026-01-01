@@ -20,6 +20,16 @@ func SearchEntriesHandler(c *fiber.Ctx) error {
 		ToDate:   c.Query("to", ""),
 	}
 
+	if params.Page < 1 {
+		params.Page = 1
+	}
+	maxlimit := 100
+	if params.Limit < 1 {
+		params.Limit = 10
+	} else if params.Limit > maxlimit {
+		params.Limit = maxlimit
+	}
+
 	if ctIDs := c.Query("content_type_ids"); ctIDs != "" {
 		ids := strings.Split(ctIDs, ",")
 		for _, id := range ids {
@@ -76,6 +86,15 @@ func AdvancedSearchHandler(c *fiber.Ctx) error {
 		SortBy         string                 `json:"sort_by"`
 		OrderBy        string                 `json:"order_by"`
 	}
+	if body.Page < 1 {
+		body.Page = 1
+	}
+	maxlimit := 100
+	if body.Limit < 1 {
+		body.Limit = 10
+	} else if body.Limit > maxlimit {
+		body.Limit = maxlimit
+	}
 
 	if err := c.BodyParser(&body); err != nil {
 		return response.BadRequest(c, "Invalid request body", err.Error())
@@ -107,6 +126,14 @@ func AdvancedSearchHandler(c *fiber.Ctx) error {
 		Limit:          body.Limit,
 		SortBy:         body.SortBy,
 		OrderBy:        body.OrderBy,
+	}
+	if params.Page < 1 {
+		params.Page = 1
+	}
+	if params.Limit < 1 {
+		params.Limit = 10
+	} else if params.Limit > maxlimit {
+		params.Limit = maxlimit
 	}
 
 	var result *SearchResult

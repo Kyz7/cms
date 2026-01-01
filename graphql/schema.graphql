@@ -1,4 +1,5 @@
 # GraphQL Schema for CMS - Complete API
+# This schema matches the actual implementation in internal/graphql/
 
 scalar Time
 scalar JSON
@@ -10,6 +11,19 @@ enum WorkflowStatus {
   APPROVED
   PUBLISHED
   REJECTED
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum ProjectRole {
+  PROJECT_OWNER
+  PROJECT_ADMIN
+  PROJECT_EDITOR
+  PROJECT_VIEWER
 }
 
 # ==========================================
@@ -57,14 +71,7 @@ type AuthPayload {
   user: User!
 }
 
-type PasswordReset {
-  token: String!
-  expiresAt: Time!
-}
-
 # ==========================================
-<<<<<<< HEAD
-=======
 # PROJECT MANAGEMENT
 # ==========================================
 
@@ -87,6 +94,8 @@ type ProjectMember {
   userId: Int!
   user: User
   role: String!
+  roleId: Int
+  roleDetail: Role
   invitedBy: Int
   inviter: User
   status: String!
@@ -94,15 +103,7 @@ type ProjectMember {
   updatedAt: Time!
 }
 
-enum ProjectRole {
-  OWNER
-  ADMIN
-  EDITOR
-  VIEWER
-}
-
 # ==========================================
->>>>>>> master
 # CONTENT MANAGEMENT
 # ==========================================
 
@@ -110,11 +111,8 @@ type ContentType {
   id: ID!
   name: String!
   slug: String!
-<<<<<<< HEAD
-=======
   projectId: Int
   project: Project
->>>>>>> master
   enableSeo: Boolean!
   fields: [ContentField!]!
   seoFields: [ContentField!]!
@@ -146,11 +144,8 @@ type ContentEntry {
   id: ID!
   contentTypeId: Int!
   contentType: ContentType
-<<<<<<< HEAD
-=======
   projectId: Int
   project: Project
->>>>>>> master
   data: JSON!
   status: WorkflowStatus!
   createdBy: Int
@@ -198,7 +193,6 @@ type MediaFolder {
   name: String!
   path: String!
   parentId: Int
-  parent: MediaFolder
   createdBy: Int!
   createdAt: Time!
   updatedAt: Time!
@@ -207,28 +201,14 @@ type MediaFolder {
 type MediaStats {
   totalFiles: Int!
   totalSize: Int!
-  filesByType: [MediaTypeStats!]!
-  recentUploads: [MediaFile!]!
-}
-
-type MediaTypeStats {
-  type: String!
-  count: Int!
-  size: Int!
+  byType: JSON
+  recentUploads: Int!
+  storageMode: String
 }
 
 # ==========================================
 # WORKFLOW MANAGEMENT
 # ==========================================
-
-type WorkflowTransition {
-  id: ID!
-  fromStatus: WorkflowStatus!
-  toStatus: WorkflowStatus!
-  requiredRole: String!
-  createdAt: Time!
-  updatedAt: Time!
-}
 
 type WorkflowHistory {
   id: ID!
@@ -270,15 +250,13 @@ type WorkflowAssignment {
 }
 
 type WorkflowStats {
-  contentTypeId: Int!
-  contentType: ContentType
-  totalEntries: Int!
-  draftCount: Int!
-  inReviewCount: Int!
-  readyForApprovalCount: Int!
-  approvedCount: Int!
-  publishedCount: Int!
-  rejectedCount: Int!
+  total: Int!
+  draft: Int!
+  in_review: Int!
+  ready_for_approval: Int!
+  approved: Int!
+  published: Int!
+  rejected: Int!
 }
 
 # ==========================================
@@ -287,224 +265,13 @@ type WorkflowStats {
 
 type SearchResult {
   entries: [ContentEntry!]!
-  totalCount: Int!
+  total: Int!
   page: Int!
   limit: Int!
+  totalPages: Int!
   hasNextPage: Boolean!
   hasPreviousPage: Boolean!
-}
-
-type SearchFacet {
-  field: String!
-  values: [FacetValue!]!
-}
-
-type FacetValue {
-  value: String!
-  count: Int!
-}
-
-type SearchSuggestion {
-  text: String!
-  type: String!
-  count: Int!
-}
-
-type SearchStats {
-  totalSearches: Int!
-  popularQueries: [String!]!
-  searchByType: [SearchTypeStats!]!
-}
-
-type SearchTypeStats {
-  contentType: String!
-  count: Int!
-}
-
-# ==========================================
-# INPUT TYPES
-# ==========================================
-
-input UserInput {
-  name: String!
-  email: String!
-  password: String!
-  roleId: Int!
-  profile: String
-}
-
-input UserUpdateInput {
-  name: String
-  email: String
-  password: String
-  roleId: Int
-  profile: String
-  status: UserStatus
-}
-
-input RoleInput {
-  name: String!
-  description: String
-  permissions: [PermissionInput!]!
-}
-
-input PermissionInput {
-  module: String!
-  action: String!
-  fieldScope: String
-  allowedFields: JSON
-  deniedFields: JSON
-  contentTypeIds: JSON
-}
-
-<<<<<<< HEAD
-=======
-input ProjectInput {
-  name: String!
-  description: String
-}
-
-input UpdateProjectInput {
-  name: String!
-  description: String
-}
-
-input AddProjectMemberInput {
-  userId: ID!
-  role: ProjectRole!
-}
-
-input UpdateProjectMemberRoleInput {
-  role: ProjectRole!
-}
-
->>>>>>> master
-input ContentTypeInput {
-  name: String!
-  slug: String!
-  enableSeo: Boolean!
-<<<<<<< HEAD
-=======
-  projectId: Int
->>>>>>> master
-}
-
-input ContentFieldInput {
-  name: String!
-  type: String!
-  required: Boolean!
-  isSeo: Boolean!
-  unique: Boolean
-  maxLength: Int
-  minLength: Int
-  pattern: String
-  minValue: Float
-  maxValue: Float
-  defaultValue: String
-  placeholder: String
-  helpText: String
-}
-
-input ContentEntryInput {
-  data: JSON!
-  status: WorkflowStatus
-}
-
-input ContentRelationInput {
-  toContentId: Int!
-  relationType: String!
-}
-
-input MediaFileInput {
-  fileName: String!
-  url: String!
-  type: String!
-  size: Int!
-  width: Int
-  height: Int
-  folder: String!
-  tags: JSON
-  alt: String!
-  caption: String
-}
-
-input MediaFolderInput {
-  name: String!
-  path: String!
-  parentId: Int
-}
-
-input WorkflowCommentInput {
-  comment: String!
-  isPrivate: Boolean!
-}
-
-input WorkflowAssignmentInput {
-  assignedTo: Int!
-  dueDate: Time
-}
-
-input SearchInput {
-  query: String!
-  contentTypeIds: [Int!]
-  status: [WorkflowStatus!]
-  createdBy: [Int!]
-  dateFrom: Time
-  dateTo: Time
-  limit: Int
-  offset: Int
-}
-
-input AdvancedSearchInput {
   query: String
-  filters: [SearchFilterInput!]
-  sort: [SearchSortInput!]
-  limit: Int
-  offset: Int
-}
-
-input SearchFilterInput {
-  field: String!
-  operator: String!
-  value: JSON!
-}
-
-input SearchSortInput {
-  field: String!
-  direction: String!
-}
-
-<<<<<<< HEAD
-=======
-input GoogleOAuthInput {
-  code: String!
-  state: String!
-}
-
->>>>>>> master
-input LoginInput {
-  email: String!
-  password: String!
-}
-
-input RegisterInput {
-  name: String!
-  email: String!
-  password: String!
-}
-
-input RefreshTokenInput {
-  userId: Int!
-  refreshToken: String!
-}
-
-input ForgotPasswordInput {
-  email: String!
-}
-
-input ResetPasswordInput {
-  token: String!
-  password: String!
 }
 
 # ==========================================
@@ -523,14 +290,11 @@ type Query {
   roles: [Role!]!
   role(id: ID!): Role
   
-<<<<<<< HEAD
-=======
   # Project Management
   projects: [Project!]!
   project(id: ID!): Project
   projectMembers(projectId: ID!): [ProjectMember!]!
   
->>>>>>> master
   # Content Management
   contentTypes: [ContentType!]!
   contentType(id: ID!): ContentType
@@ -542,22 +306,52 @@ type Query {
   mediaFiles(limit: Int, offset: Int, folder: String): [MediaFile!]!
   mediaFile(id: ID!): MediaFile
   mediaFolders: [MediaFolder!]!
-  mediaFolder(id: ID!): MediaFolder
   mediaStats: MediaStats!
   
   # Workflow Management
   workflowHistory(entryId: Int!): [WorkflowHistory!]!
-  workflowComments(entryId: Int!): [WorkflowComment!]!
-  workflowAssignments: [WorkflowAssignment!]!
-  workflowStats(contentTypeId: Int): [WorkflowStats!]!
+  workflowComments(entryId: Int!, includePrivate: Boolean): [WorkflowComment!]!
+  workflowAssignments(status: String): [WorkflowAssignment!]!
+  workflowStats(contentTypeId: Int!): WorkflowStats!
   
   # Search & Filtering
-  searchEntries(input: SearchInput!): SearchResult!
-  advancedSearch(input: AdvancedSearchInput!): SearchResult!
-  searchFacets: [SearchFacet!]!
-  searchSuggestions(query: String!): [SearchSuggestion!]!
-  searchStats: SearchStats!
-  relatedEntries(entryId: Int!): [ContentEntry!]!
+  searchEntries(
+    query: String
+    contentTypeIds: [Int!]
+    fields: [String!]
+    status: String
+    createdBy: Int
+    tags: [String!]
+    fromDate: String
+    toDate: String
+    page: Int
+    limit: Int
+    sortBy: String
+    orderBy: String
+  ): SearchResult!
+  
+  advancedSearch(
+    query: String
+    contentTypeIds: [Int!]
+    fields: [String!]
+    status: String
+    createdBy: Int
+    tags: [String!]
+    fromDate: String
+    toDate: String
+    filters: JSON
+    page: Int
+    limit: Int
+    sortBy: String
+    orderBy: String
+  ): SearchResult!
+  
+  searchFacets(query: String, contentTypeIds: [Int!]): JSON!
+  
+  autocomplete(field: String!, prefix: String!, contentTypeId: Int!, limit: Int): [String!]!
+  
+  # SEO
+  seoPreview(entryId: Int!): JSON!
 }
 
 # ==========================================
@@ -565,103 +359,114 @@ type Query {
 # ==========================================
 
 type Mutation {
-  # Authentication
-  login(input: LoginInput!): AuthPayload!
-  register(input: RegisterInput!): AuthPayload!
-<<<<<<< HEAD
-=======
-  googleOAuth(input: GoogleOAuthInput!): AuthPayload!
->>>>>>> master
-  refreshToken(input: RefreshTokenInput!): AuthPayload!
-  forgotPassword(input: ForgotPasswordInput!): Boolean!
-  resetPassword(input: ResetPasswordInput!): Boolean!
-  logout: Boolean!
+  # Authentication (Public)
+  login(email: String!, password: String!): AuthPayload!
+  register(name: String!, email: String!, password: String!): AuthPayload!
   
-  # User Management
-  createUser(input: UserInput!): User!
-  updateUser(id: ID!, input: UserUpdateInput!): User!
+  # User Management (Admin only)
+  createUser(name: String!, email: String!, password: String!, roleId: Int!): User!
+  updateUser(
+    id: ID!
+    name: String
+    email: String
+    password: String
+    roleId: Int
+    status: UserStatus
+  ): User!
   deleteUser(id: ID!): Boolean!
   
-  # Role Management
-  createRole(input: RoleInput!): Role!
-  updateRole(id: ID!, input: RoleInput!): Role!
+  # Role Management (Admin only)
+  createRole(name: String!, description: String): Role!
+  updateRole(id: ID!, name: String, description: String): Role!
   deleteRole(id: ID!): Boolean!
-  duplicateRole(id: ID!): Role!
+  duplicateRole(id: ID!, name: String): Role!
   assignRoleToUser(userId: ID!, roleId: ID!): Boolean!
   
-<<<<<<< HEAD
-=======
   # Project Management
-  createProject(input: ProjectInput!): Project!
-  updateProject(id: ID!, input: UpdateProjectInput!): Project!
+  createProject(name: String!, description: String): Project!
+  updateProject(id: ID!, name: String!, description: String): Project!
   deleteProject(id: ID!): Boolean!
-  addProjectMember(projectId: ID!, input: AddProjectMemberInput!): ProjectMember!
-  updateProjectMemberRole(projectId: ID!, memberId: ID!, input: UpdateProjectMemberRoleInput!): ProjectMember!
+  addProjectMember(projectId: ID!, userId: ID!, role: String!): ProjectMember!
+  updateProjectMemberRole(projectId: ID!, memberId: ID!, role: String!): ProjectMember!
   removeProjectMember(projectId: ID!, memberId: ID!): Boolean!
   
->>>>>>> master
-  # Content Management
-  createContentType(input: ContentTypeInput!): ContentType!
-  updateContentType(id: ID!, input: ContentTypeInput!): ContentType!
+  # Content Types
+  createContentType(name: String!, slug: String!, enableSeo: Boolean, projectId: Int): ContentType!
+  updateContentType(id: ID!, name: String, slug: String, enableSeo: Boolean): ContentType!
   deleteContentType(id: ID!): Boolean!
   
-  addContentField(contentTypeId: ID!, input: ContentFieldInput!): ContentField!
-  updateContentField(id: ID!, input: ContentFieldInput!): ContentField!
+  # Content Fields
+  addContentField(
+    contentTypeId: Int!
+    name: String!
+    type: String!
+    required: Boolean
+    isSeo: Boolean
+    unique: Boolean
+    maxLength: Int
+    minLength: Int
+    pattern: String
+    minValue: Float
+    maxValue: Float
+    defaultValue: String
+    placeholder: String
+    helpText: String
+  ): ContentField!
+  
+  updateContentField(
+    id: ID!
+    name: String
+    type: String
+    required: Boolean
+    isSeo: Boolean
+    unique: Boolean
+    maxLength: Int
+    minLength: Int
+    pattern: String
+    minValue: Float
+    maxValue: Float
+    defaultValue: String
+    placeholder: String
+    helpText: String
+  ): ContentField!
+  
   deleteContentField(id: ID!): Boolean!
   
-  createContentEntry(contentTypeId: ID!, input: ContentEntryInput!): ContentEntry!
-  updateContentEntry(id: ID!, input: ContentEntryInput!): ContentEntry!
+  # Content Entries
+  createContentEntry(contentTypeId: ID!, data: JSON!): ContentEntry!
+  updateContentEntry(id: ID!, data: JSON, status: WorkflowStatus): ContentEntry!
   deleteContentEntry(id: ID!): Boolean!
+  translateContentEntry(
+    id: ID!
+    targetLang: String!
+    sourceLang: String
+    fields: [String!]
+  ): ContentEntry!
   
-  createContentRelation(fromContentId: ID!, input: ContentRelationInput!): ContentRelation!
+  # Content Relations
+  createContentRelation(
+    fromContentId: ID!
+    toContentId: Int!
+    relationType: String!
+  ): ContentRelation!
   deleteContentRelation(id: ID!): Boolean!
   
-  # Media Management
-  uploadMedia(file: Upload!, folder: String, alt: String, caption: String): MediaFile!
-  bulkUploadMedia(files: [Upload!]!, folder: String): [MediaFile!]!
-  createMediaFolder(input: MediaFolderInput!): MediaFolder!
-  updateMediaFile(id: ID!, input: MediaFileInput!): MediaFile!
-  deleteMediaFile(id: ID!): Boolean!
+  # Media
+  createMediaFolder(name: String!, parentId: Int): MediaFolder!
   
-  # Workflow Management
-  changeContentStatus(entryId: ID!, status: WorkflowStatus!, comment: String): WorkflowHistory!
-  requestReview(entryId: ID!, comment: String): WorkflowHistory!
-  approveEntry(entryId: ID!, comment: String): WorkflowHistory!
-  rejectEntry(entryId: ID!, comment: String): WorkflowHistory!
-  publishEntry(entryId: ID!, comment: String): WorkflowHistory!
+  # Workflow
+  changeContentStatus(
+    entryId: Int!
+    status: WorkflowStatus!
+    comment: String
+  ): WorkflowHistory!
   
-  addWorkflowComment(entryId: ID!, input: WorkflowCommentInput!): WorkflowComment!
+  requestReview(entryId: Int!, comment: String): WorkflowHistory!
+  approveEntry(entryId: Int!, comment: String): WorkflowHistory!
+  rejectEntry(entryId: Int!, comment: String!): WorkflowHistory!
+  publishEntry(entryId: Int!, comment: String): WorkflowHistory!
   
-  assignEntry(entryId: ID!, input: WorkflowAssignmentInput!): WorkflowAssignment!
-  completeAssignment(id: ID!): Boolean!
+  addWorkflowComment(entryId: Int!, comment: String!, isPrivate: Boolean): WorkflowComment!
+  
+  assignEntry(entryId: Int!, assignedTo: Int!, dueDate: Time): WorkflowAssignment!
 }
-
-# ==========================================
-# SUBSCRIPTIONS (for real-time updates)
-# ==========================================
-
-type Subscription {
-  # Content updates
-  contentEntryUpdated(contentTypeId: Int): ContentEntry!
-  contentEntryCreated(contentTypeId: Int): ContentEntry!
-  contentEntryDeleted(contentTypeId: Int): ID!
-  
-  # Workflow updates
-  workflowStatusChanged(entryId: Int): WorkflowHistory!
-  workflowCommentAdded(entryId: Int): WorkflowComment!
-  workflowAssignmentCreated: WorkflowAssignment!
-  
-  # Media updates
-  mediaFileUploaded: MediaFile!
-  mediaFileDeleted: ID!
-  
-  # User updates
-  userUpdated: User!
-  userCreated: User!
-}
-
-# ==========================================
-# SCALAR TYPES
-# ==========================================
-
-scalar Upload

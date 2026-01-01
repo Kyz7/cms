@@ -53,7 +53,14 @@ func JWTProtected() fiber.Handler {
 
 func RoleProtected(allowedRoles ...string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		userID := c.Locals("user_id").(uint)
+		userIDInterface := c.Locals("user_id")
+		if userIDInterface != nil {
+			return response.Unauthorized(c, "User not authenticated")
+		}
+		userID, ok := userIDInterface.(uint)
+		if !ok {
+			return response.Unauthorized(c, "Invalid user context")
+		}
 
 		var u models.User
 		if err := database.DB.Preload("Role").First(&u, userID).Error; err != nil {

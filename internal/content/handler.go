@@ -73,7 +73,14 @@ func CreateContentTypeHandler(c *fiber.Ctx) error {
 		})
 	}
 
-	userID := c.Locals("user_id").(uint)
+	userIDInterface := c.Locals("user_id")
+	if userIDInterface == nil {
+		return response.Unauthorized(c, "User not authenticated")
+	}
+	userID, ok := userIDInterface.(uint)
+	if !ok {
+		return response.Unauthorized(c, "Invalid user context")
+	}
 
 	ownerID, ok := globals.GetRoleIDByName(models.ProjectRoleOwner)
 	if !ok {
@@ -143,7 +150,14 @@ func CreateEntryHandler(c *fiber.Ctx) error {
 		return response.BadRequest(c, "Invalid Content Type ID", nil)
 	}
 
-	userID := c.Locals("user_id").(uint)
+	userIDInterface := c.Locals("user_id")
+	if userIDInterface == nil {
+		return response.Unauthorized(c, "User not authenticated")
+	}
+	userID, ok := userIDInterface.(uint)
+	if !ok {
+		return response.Unauthorized(c, "Invalid user context")
+	}
 	ctID := uint(contentTypeID)
 
 	// 1. Ambil Content Type dan Field Terkait
@@ -289,7 +303,14 @@ func mapFormToData(c *fiber.Ctx, form *multipart.Form, allFields []models.Conten
 func CreateEntryHandlerJSON(c *fiber.Ctx) error {
 	contentTypeIDInt, _ := c.ParamsInt("content_type_id")
 	contentTypeID := uint(contentTypeIDInt)
-	userID := c.Locals("user_id").(uint)
+	userIDInterface := c.Locals("user_id")
+	if userIDInterface == nil {
+		return response.Unauthorized(c, "User not authenticated")
+	}
+	userID, ok := userIDInterface.(uint)
+	if !ok {
+		return response.Unauthorized(c, "Invalid user context")
+	}
 
 	var ct models.ContentType
 	if err := database.DB.Preload("Fields").Preload("SEOFields").First(&ct, contentTypeID).Error; err != nil {
@@ -365,7 +386,14 @@ func CreateEntryHandlerJSON(c *fiber.Ctx) error {
 
 func ListEntriesHandler(c *fiber.Ctx) error {
 	contentTypeID, _ := c.ParamsInt("content_type_id")
-	userID := c.Locals("user_id").(uint)
+	userIDInterface := c.Locals("user_id")
+	if userIDInterface == nil {
+		return response.Unauthorized(c, "User not authenticated")
+	}
+	userID, ok := userIDInterface.(uint)
+	if !ok {
+		return response.Unauthorized(c, "Invalid user context")
+	}
 
 	// Get content type to check if it belongs to a project
 	var ct models.ContentType
@@ -403,7 +431,17 @@ func ListEntriesHandler(c *fiber.Ctx) error {
 	}
 
 	page := c.QueryInt("page", 1)
+	if page < 1 {
+		page = 1
+	}
 	limit := c.QueryInt("limit", 10)
+
+	maxLimit := 100
+	if limit < 1 {
+		limit = 10
+	} else if limit > maxLimit {
+		limit = maxLimit
+	}
 	offset := (page - 1) * limit
 
 	// debug logging removed
@@ -487,8 +525,6 @@ func SEOPreviewHandler(c *fiber.Ctx) error {
 	return response.Success(c, seoData, "SEO preview generated successfully")
 }
 
-// GeneratePreviewTokenHandler issues a signed preview token and URL for live preview.
-// Requires authenticated user with ContentEntry:read permission.
 func GeneratePreviewTokenHandler(c *fiber.Ctx) error {
 	entryID, err := c.ParamsInt("entry_id")
 	if err != nil || entryID <= 0 {
@@ -498,7 +534,7 @@ func GeneratePreviewTokenHandler(c *fiber.Ctx) error {
 	var entry models.ContentEntry
 	if err := database.DB.First(&entry, entryID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return response.NotFound(c, "Entry")
+			return response.NotFound(c, "Content Entry")
 		}
 		return response.InternalError(c, "Failed to fetch entry")
 	}
@@ -509,9 +545,14 @@ func GeneratePreviewTokenHandler(c *fiber.Ctx) error {
 	}
 
 	backendURL := BuildPreviewURL(c.BaseURL(), entry.ID, token)
-	frontendURL := os.Getenv("PREVIEW_FRONTEND_URL")
-	if frontendURL != "" {
-		frontendURL = BuildPreviewURL(frontendURL, entry.ID, token)
+
+	var frontendURL string
+	rawFrontendBase := os.Getenv("FRONTEND_URL")
+
+	if rawFrontendBase != "" {
+		cleanBase := strings.TrimSuffix(rawFrontendBase, "/")
+		previewPath := cleanBase + "/preview"
+		frontendURL = BuildPreviewURL(previewPath, entry.ID, token)
 	}
 
 	return response.Success(c, fiber.Map{
@@ -559,7 +600,15 @@ func PreviewEntryHandler(c *fiber.Ctx) error {
 
 func UpdateEntryHandler(c *fiber.Ctx) error {
 	entryID, _ := c.ParamsInt("entry_id")
-	userID := c.Locals("user_id").(uint)
+
+	userIDInterface := c.Locals("user_id")
+	if userIDInterface == nil {
+		return response.Unauthorized(c, "User not authenticated")
+	}
+	userID, ok := userIDInterface.(uint)
+	if !ok {
+		return response.Unauthorized(c, "Invalid user context")
+	}
 
 	var entry models.ContentEntry
 	if err := database.DB.First(&entry, entryID).Error; err != nil {
@@ -698,7 +747,14 @@ func UpdateEntryHandler(c *fiber.Ctx) error {
 }
 
 func ListContentTypesHandler(c *fiber.Ctx) error {
-	userID := c.Locals("user_id").(uint)
+	userIDInterface := c.Locals("user_id")
+	if userIDInterface == nil {
+		return response.Unauthorized(c, "User not authenticated")
+	}
+	userID, ok := userIDInterface.(uint)
+	if !ok {
+		return response.Unauthorized(c, "Invalid user context")
+	}
 	var cts []models.ContentType
 	query := database.DB
 
@@ -790,7 +846,14 @@ func TranslateEntryHandler(c *fiber.Ctx) error {
 		return response.BadRequest(c, "Invalid entry ID", nil)
 	}
 
-	userID := c.Locals("user_id").(uint)
+	userIDInterface := c.Locals("user_id")
+	if userIDInterface == nil {
+		return response.Unauthorized(c, "User not authenticated")
+	}
+	userID, ok := userIDInterface.(uint)
+	if !ok {
+		return response.Unauthorized(c, "Invalid user context")
+	}
 
 	var body TranslateEntryRequest
 	if err := c.BodyParser(&body); err != nil {
@@ -902,7 +965,14 @@ func inferLangFromAcceptLanguage(header string) string {
 
 func GetEntriesSemuaHandler(c *fiber.Ctx) error {
 	// Ambil User ID dari Fiber Locals
-	userID := c.Locals("user_id").(uint)
+	userIDInterface := c.Locals("user_id")
+	if userIDInterface == nil {
+		return response.Unauthorized(c, "User not authenticated")
+	}
+	userID, ok := userIDInterface.(uint)
+	if !ok {
+		return response.Unauthorized(c, "Invalid user context")
+	}
 
 	// Ambil ContentTypeID dari query parameter untuk filtering opsional
 	contentTypeIDStr := c.Query("content_type_id")

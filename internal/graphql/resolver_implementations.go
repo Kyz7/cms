@@ -8,6 +8,7 @@ import (
 
 	"github.com/Kyz7/cms/internal/content"
 	"github.com/Kyz7/cms/internal/models"
+	"github.com/Kyz7/cms/internal/project"
 	"github.com/Kyz7/cms/internal/search"
 	"github.com/Kyz7/cms/internal/translation"
 	"github.com/Kyz7/cms/internal/workflow"
@@ -444,6 +445,12 @@ func (r *Resolvers) CreateContentTypeResolver(p graphql.ResolveParams) (interfac
 		Name:      name,
 		Slug:      slug,
 		EnableSEO: enableSeo,
+	}
+
+	// Handle projectId if provided
+	if projectIDVal, ok := p.Args["projectId"]; ok && projectIDVal != nil {
+		projectID := uint(projectIDVal.(int))
+		contentType.ProjectID = &projectID
 	}
 
 	if err := r.DB.Create(contentType).Error; err != nil {
@@ -1726,4 +1733,247 @@ func (r *Resolvers) AutocompleteResolver(p graphql.ResolveParams) (interface{}, 
 		limit = v
 	}
 	return search.AutoComplete(field, prefix, ctID, limit)
+}
+
+// =====================
+// Project Resolvers
+// =====================
+
+func (r *Resolvers) ProjectsResolver(p graphql.ResolveParams) (interface{}, error) {
+	userID, err := r.getUserIDFromContext(p)
+	if err != nil {
+		return nil, err
+	}
+
+	projects, err := project.ListProjects(userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list projects: %w", err)
+	}
+
+	result := make([]map[string]interface{}, len(projects))
+	for i, proj := range projects {
+		result[i] = ConvertProjectToGraphQL(&proj)
+	}
+	return result, nil
+}
+
+func (r *Resolvers) ProjectResolver(p graphql.ResolveParams) (interface{}, error) {
+	userID, err := r.getUserIDFromContext(p)
+	if err != nil {
+		return nil, err
+	}
+
+	idStr := p.Args["id"].(string)
+	id64, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid project ID: %w", err)
+	}
+
+	proj, err := project.GetProject(uint(id64))
+	if err != nil {
+		return nil, fmt.Errorf("project not found: %w", err)
+	}
+
+	// Check if user is a member
+	if _, err := project.GetProjectMember(uint(id64), userID); err != nil {
+		return nil, fmt.Errorf("permission denied: you are not a member of this project")
+	}
+
+	return ConvertProjectToGraphQL(proj), nil
+}
+
+func (r *Resolvers) ProjectMembersResolver(p graphql.ResolveParams) (interface{}, error) {
+	userID, err := r.getUserIDFromContext(p)
+	if err != nil {
+		return nil, err
+	}
+
+	projectIDStr := p.Args["projectId"].(string)
+	projectID64, err := strconv.ParseUint(projectIDStr, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid project ID: %w", err)
+	}
+	projectID := uint(projectID64)
+
+	// Check if user is a member
+	if _, err := project.GetProjectMember(projectID, userID); err != nil {
+		return nil, fmt.Errorf("permission denied: you are not a member of this project")
+	}
+
+	members, err := project.ListProjectMembers(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list project members: %w", err)
+	}
+
+	result := make([]map[string]interface{}, len(members))
+	for i, member := range members {
+		result[i] = ConvertProjectMemberToGraphQL(&member)
+	}
+	return result, nil
+}
+
+func (r *Resolvers) CreateProjectResolver(p graphql.ResolveParams) (interface{}, error) {
+	userID, err := r.getUserIDFromContext(p)
+	if err != nil {
+		return nil, err
+	}
+
+	name := p.Args["name"].(string)
+	description := ""
+	if v, ok := p.Args["description"].(string); ok {
+		description = v
+	}
+
+	proj, err := project.CreateProject(name, description, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create project: %w", err)
+	}
+
+	return ConvertProjectToGraphQL(proj), nil
+}
+
+func (r *Resolvers) UpdateProjectResolver(p graphql.ResolveParams) (interface{}, error) {
+	userID, err := r.getUserIDFromContext(p)
+	if err != nil {
+		return nil, err
+	}
+
+	idStr := p.Args["id"].(string)
+	id64, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid project ID: %w", err)
+	}
+	projectID := uint(id64)
+
+	// Check if user has permission (owner or admin)
+	if !project.HasProjectPermission(projectID, userID, models.ProjectRoleAdmin) {
+		return nil, fmt.Errorf("permission denied: only project owners and admins can update project")
+	}
+
+	name := p.Args["name"].(string)
+	description := ""
+	if v, ok := p.Args["description"].(string); ok {
+		description = v
+	}
+
+	proj, err := project.UpdateProject(projectID, name, description)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update project: %w", err)
+	}
+
+	return ConvertProjectToGraphQL(proj), nil
+}
+
+func (r *Resolvers) DeleteProjectResolver(p graphql.ResolveParams) (interface{}, error) {
+	userID, err := r.getUserIDFromContext(p)
+	if err != nil {
+		return nil, err
+	}
+
+	idStr := p.Args["id"].(string)
+	id64, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid project ID: %w", err)
+	}
+	projectID := uint(id64)
+
+	// Check if user is owner
+	if !project.HasProjectPermission(projectID, userID, "owner") {
+		return nil, fmt.Errorf("permission denied: only project owner can delete project")
+	}
+
+	if err := project.DeleteProject(projectID); err != nil {
+		return nil, fmt.Errorf("failed to delete project: %w", err)
+	}
+
+	return true, nil
+}
+
+func (r *Resolvers) AddProjectMemberResolver(p graphql.ResolveParams) (interface{}, error) {
+	userID, err := r.getUserIDFromContext(p)
+	if err != nil {
+		return nil, err
+	}
+
+	projectIDStr := p.Args["projectId"].(string)
+	projectID64, err := strconv.ParseUint(projectIDStr, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid project ID: %w", err)
+	}
+	projectID := uint(projectID64)
+
+	userIDStr := p.Args["userId"].(string)
+	userID64, err := strconv.ParseUint(userIDStr, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user ID: %w", err)
+	}
+	memberUserID := uint(userID64)
+
+	role := p.Args["role"].(string)
+
+	member, err := project.AddProjectMember(projectID, memberUserID, userID, role)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add project member: %w", err)
+	}
+
+	// Member already has Role preloaded from AddProjectMember
+	return ConvertProjectMemberToGraphQL(member), nil
+}
+
+func (r *Resolvers) UpdateProjectMemberRoleResolver(p graphql.ResolveParams) (interface{}, error) {
+	userID, err := r.getUserIDFromContext(p)
+	if err != nil {
+		return nil, err
+	}
+
+	projectIDStr := p.Args["projectId"].(string)
+	projectID64, err := strconv.ParseUint(projectIDStr, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid project ID: %w", err)
+	}
+	projectID := uint(projectID64)
+
+	memberIDStr := p.Args["memberId"].(string)
+	memberID64, err := strconv.ParseUint(memberIDStr, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid member ID: %w", err)
+	}
+	memberID := uint(memberID64)
+
+	role := p.Args["role"].(string)
+
+	member, err := project.UpdateProjectMemberRole(projectID, memberID, userID, role)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update project member role: %w", err)
+	}
+
+	// Member already has Role preloaded from UpdateProjectMemberRole
+	return ConvertProjectMemberToGraphQL(member), nil
+}
+
+func (r *Resolvers) RemoveProjectMemberResolver(p graphql.ResolveParams) (interface{}, error) {
+	userID, err := r.getUserIDFromContext(p)
+	if err != nil {
+		return nil, err
+	}
+
+	projectIDStr := p.Args["projectId"].(string)
+	projectID64, err := strconv.ParseUint(projectIDStr, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid project ID: %w", err)
+	}
+	projectID := uint(projectID64)
+
+	memberIDStr := p.Args["memberId"].(string)
+	memberID64, err := strconv.ParseUint(memberIDStr, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid member ID: %w", err)
+	}
+	memberID := uint(memberID64)
+
+	if err := project.RemoveProjectMember(projectID, memberID, userID); err != nil {
+		return nil, fmt.Errorf("failed to remove project member: %w", err)
+	}
+
+	return true, nil
 }

@@ -21,10 +21,10 @@ func init() {
 	}
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		secret = "test_secret_key_minimum_32_characters_long_for_testing_only"
+		jwtKey = []byte(secret)
+		return
 	}
 
-	jwtKey = []byte(secret)
 }
 
 func ValidateJWTSecret() error {

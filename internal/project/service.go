@@ -359,6 +359,7 @@ func ListProjectMembers(projectID uint) ([]models.ProjectMember, error) {
 	err := database.DB.
 		Where("project_id = ?", projectID).
 		Preload("User").
+		Preload("Role").
 		Preload("Inviter").
 		Order("created_at DESC").
 		Find(&members).Error

@@ -171,13 +171,21 @@ func BulkUploadMediaHandler(c *fiber.Ctx) error {
 }
 
 func ListMediaHandler(c *fiber.Ctx) error {
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	page := c.QueryInt("page", 1)
+	if page < 1 {
+		page = 1
+	}
+	limit := c.QueryInt("limit", 10)
+	maxLimit := 100
+	if limit < 1 {
+		limit = 10
+	} else if limit > maxLimit {
+		limit = maxLimit
+	}
+	offset := (page - 1) * limit
 	mediaType := c.Query("type", "")
 	folder := c.Query("folder", "")
 	search := c.Query("search", "")
-
-	offset := (page - 1) * limit
 
 	var mediaFiles []models.MediaFile
 	var total int64

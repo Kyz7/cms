@@ -19,8 +19,18 @@ type Config struct {
 func Load() *Config {
 	_ = godotenv.Load()
 
+	// Support PORT env var (used by Render, Heroku, etc.)
+	// If PORT is set, use it; otherwise check SERVER_ADDR; otherwise default to :8080
+	port := getEnv("PORT", "")
+	serverAddr := getEnv("SERVER_ADDR", "")
+	if port != "" {
+		serverAddr = ":" + port
+	} else if serverAddr == "" {
+		serverAddr = ":8080"
+	}
+
 	cfg := &Config{
-		ServerAddr: getEnv("SERVER_ADDR", ":8080"),
+		ServerAddr: serverAddr,
 		DBHost:     getEnv("DB_HOST", "localhost"),
 		DBPort:     getEnv("DB_PORT", "5432"),
 		DBUser:     getEnv("DB_USER", "postgres"),
@@ -28,7 +38,7 @@ func Load() *Config {
 		DBName:     getEnv("DB_NAME", "starpi"),
 	}
 
-	log.Println("✅ Config loaded")
+	log.Println("Config loaded")
 	return cfg
 }
 

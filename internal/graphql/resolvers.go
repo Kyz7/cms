@@ -17,6 +17,11 @@ func NewResolvers(db *gorm.DB) *Resolvers {
 }
 
 func (r *Resolvers) CreateSchema() (graphql.Schema, error) {
+	// Ensure Project types are initialized before creating schema
+	if ProjectType == nil || ProjectMemberType == nil {
+		initProjectTypes()
+	}
+
 	queryType := graphql.NewObject(graphql.ObjectConfig{
 		Name: "Query",
 		Fields: graphql.Fields{
@@ -57,6 +62,28 @@ func (r *Resolvers) CreateSchema() (graphql.Schema, error) {
 					},
 				},
 				Resolve: r.RoleResolver,
+			},
+			"projects": &graphql.Field{
+				Type:    graphql.NewList(getProjectType()),
+				Resolve: r.ProjectsResolver,
+			},
+			"project": &graphql.Field{
+				Type: getProjectType(),
+				Args: graphql.FieldConfigArgument{
+					"id": &graphql.ArgumentConfig{
+						Type: graphql.NewNonNull(graphql.ID),
+					},
+				},
+				Resolve: r.ProjectResolver,
+			},
+			"projectMembers": &graphql.Field{
+				Type: graphql.NewList(getProjectMemberType()),
+				Args: graphql.FieldConfigArgument{
+					"projectId": &graphql.ArgumentConfig{
+						Type: graphql.NewNonNull(graphql.ID),
+					},
+				},
+				Resolve: r.ProjectMembersResolver,
 			},
 			"contentTypes": &graphql.Field{
 				Type:    graphql.NewList(ContentTypeType),
@@ -375,6 +402,9 @@ func (r *Resolvers) CreateSchema() (graphql.Schema, error) {
 					},
 					"enableSeo": &graphql.ArgumentConfig{
 						Type: graphql.Boolean,
+					},
+					"projectId": &graphql.ArgumentConfig{
+						Type: graphql.Int,
 					},
 				},
 				Resolve: r.CreateContentTypeResolver,

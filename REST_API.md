@@ -21,6 +21,154 @@ Authentication
   - Public
   - 200: `{ status: "ok", message: "CMS API is running" }`
 
+- GET `/csrf-token`
+  - Public
+  - 200: `{ csrf_token: string }`
+
+---
+
+### Documentation
+- GET `/swagger/*` - Swagger UI (serves OpenAPI documentation)
+- GET `/openapi.yaml` - OpenAPI specification file
+
+---
+
+### GraphQL
+GraphQL API uses standard GraphQL protocol. Most operations require JWT authentication via `Authorization: Bearer <token>` header. Exceptions: `login` and `register` mutations are public.
+
+Endpoints:
+- POST `/graphql`
+  - Body (json): `{ query: string, variables?: object, operationName?: string }`
+  - Headers: `Authorization: Bearer <token>` (optional, required for most operations)
+  - 200: `{ data?: any, errors?: array }`
+
+- GET `/graphql`
+  - GraphiQL playground (interactive GraphQL IDE)
+  - Development only, provides visual query builder
+
+- POST `/graphql/batch`
+  - Body (json): Array of `{ query, variables?, operationName? }` (max 10 requests)
+  - Headers: `Authorization: Bearer <token>` (optional)
+  - 200: Array of GraphQL responses
+
+#### Queries
+
+Auth & User:
+- `me: User` - Get current authenticated user (requires auth)
+- `users(limit?: Int, offset?: Int): [User]` - List users (admin only)
+- `user(id: ID!): User` - Get user by ID (admin only)
+
+Roles:
+- `roles: [Role]` - List all roles (admin only)
+- `role(id: ID!): Role` - Get role by ID (admin only)
+
+Content:
+- `contentTypes: [ContentType]` - List all content types
+- `contentType(id: ID!): ContentType` - Get content type by ID
+- `contentEntries(contentTypeId: Int!, limit?: Int, offset?: Int): [ContentEntry]` - List entries by content type
+- `contentEntry(id: ID!): ContentEntry` - Get entry by ID
+- `contentRelations(fromContentId: Int!): [ContentRelation]` - Get relations for entry
+
+Media:
+- `mediaFiles(limit?: Int, offset?: Int, folder?: String): [MediaFile]` - List media files
+- `mediaFile(id: ID!): MediaFile` - Get media file by ID
+- `mediaFolders: [MediaFolder]` - List media folders
+- `mediaStats: MediaStats` - Get media statistics
+
+Search:
+- `searchEntries(query?: String, contentTypeIds?: [Int], fields?: [String], status?: String, createdBy?: Int, tags?: [String], fromDate?: String, toDate?: String, page?: Int, limit?: Int, sortBy?: String, orderBy?: String): SearchResult` - Full-text search
+- `advancedSearch(query?: String, contentTypeIds?: [Int], fields?: [String], status?: String, createdBy?: Int, tags?: [String], fromDate?: String, toDate?: String, filters?: JSON, page?: Int, limit?: Int, sortBy?: String, orderBy?: String): SearchResult` - Advanced search with filters
+- `searchFacets(query?: String, contentTypeIds?: [Int]): JSON` - Get search facets
+- `autocomplete(field: String!, prefix: String!, contentTypeId: Int!, limit?: Int): [String]` - Autocomplete suggestions
+
+Workflow:
+- `workflowHistory(entryId: Int!): [WorkflowHistory]` - Get workflow history for entry
+- `workflowComments(entryId: Int!, includePrivate?: Boolean): [WorkflowComment]` - Get comments for entry
+- `workflowAssignments(status?: String): [WorkflowAssignment]` - Get workflow assignments
+- `workflowStats(contentTypeId: Int!): WorkflowStats` - Get workflow statistics
+
+SEO:
+- `seoPreview(entryId: Int!): JSON` - Get SEO preview data
+
+#### Mutations
+
+Auth (Public):
+- `login(email: String!, password: String!): AuthPayload` - Login user
+- `register(name: String!, email: String!, password: String!): AuthPayload` - Register new user
+
+Users (Admin only):
+- `createUser(name: String!, email: String!, password: String!, roleId: Int!): User`
+- `updateUser(id: ID!, name?: String, email?: String, password?: String, roleId?: Int, status?: UserStatus): User`
+- `deleteUser(id: ID!): Boolean`
+
+Roles (Admin only):
+- `createRole(name: String!, description?: String): Role`
+- `updateRole(id: ID!, name?: String, description?: String): Role`
+- `deleteRole(id: ID!): Boolean`
+- `duplicateRole(id: ID!, name?: String): Role`
+- `assignRoleToUser(userId: ID!, roleId: ID!): Boolean`
+
+Content Types:
+- `createContentType(name: String!, slug: String!, enableSeo?: Boolean): ContentType`
+- `updateContentType(id: ID!, name?: String, slug?: String, enableSeo?: Boolean): ContentType`
+- `deleteContentType(id: ID!): Boolean`
+
+Content Fields:
+- `addContentField(contentTypeId: Int!, name: String!, type: String!, required?: Boolean, isSeo?: Boolean, unique?: Boolean, maxLength?: Int, minLength?: Int, pattern?: String, minValue?: Float, maxValue?: Float, defaultValue?: String, placeholder?: String, helpText?: String): ContentField`
+- `updateContentField(id: ID!, name?: String, type?: String, required?: Boolean, isSeo?: Boolean, unique?: Boolean, maxLength?: Int, minLength?: Int, pattern?: String, minValue?: Float, maxValue?: Float, defaultValue?: String, placeholder?: String, helpText?: String): ContentField`
+- `deleteContentField(id: ID!): Boolean`
+
+Content Entries:
+- `createContentEntry(contentTypeId: ID!, data: JSON!): ContentEntry`
+- `updateContentEntry(id: ID!, data?: JSON, status?: WorkflowStatus): ContentEntry`
+- `deleteContentEntry(id: ID!): Boolean`
+- `translateContentEntry(id: ID!, targetLang: String!, sourceLang?: String, fields?: [String]): ContentEntry`
+
+Content Relations:
+- `createContentRelation(fromContentId: ID!, toContentId: Int!, relationType: String!): ContentRelation`
+- `deleteContentRelation(id: ID!): Boolean`
+
+Media:
+- `createMediaFolder(name: String!, parentId?: Int): MediaFolder`
+
+Workflow:
+- `changeContentStatus(entryId: Int!, status: WorkflowStatus!, comment?: String): WorkflowHistory`
+- `requestReview(entryId: Int!, comment?: String): WorkflowHistory`
+- `approveEntry(entryId: Int!, comment?: String): WorkflowHistory`
+- `rejectEntry(entryId: Int!, comment: String!): WorkflowHistory`
+- `publishEntry(entryId: Int!, comment?: String): WorkflowHistory`
+- `addWorkflowComment(entryId: Int!, comment: String!, isPrivate?: Boolean): WorkflowComment`
+- `assignEntry(entryId: Int!, assignedTo: Int!, dueDate?: Time): WorkflowAssignment`
+
+#### Types
+
+- `User`: id, name, email, provider, status, roleId, role, profile, createdAt, updatedAt
+- `Role`: id, name, description, permissions, createdAt, updatedAt
+- `Permission`: id, roleId, module, action, fieldScope, allowedFields, deniedFields, contentTypeIds, createdAt, updatedAt
+- `ContentType`: id, name, slug, enableSeo, fields, seoFields, createdAt, updatedAt
+- `ContentField`: id, contentTypeId, name, type, required, isSeo, unique, maxLength, minLength, pattern, minValue, maxValue, defaultValue, placeholder, helpText, createdAt, updatedAt
+- `ContentEntry`: id, contentTypeId, contentType, data (JSON), status, createdBy, updatedBy, creator, updater, createdAt, updatedAt, publishedAt
+- `ContentRelation`: id, fromContentId, toContentId, relationType, createdAt, updatedAt
+- `MediaFile`: id, fileName, url, type, size, width, height, folder, tags, alt, caption, uploadedBy, uploader, createdAt, updatedAt
+- `MediaFolder`: id, name, path, parentId, createdBy, createdAt, updatedAt
+- `MediaStats`: totalFiles, totalSize, byType, recentUploads, storageMode
+- `WorkflowHistory`: id, entryId, entry, fromStatus, toStatus, changedBy, user, comment, createdAt, updatedAt
+- `WorkflowComment`: id, entryId, entry, userId, user, comment, isPrivate, createdAt, updatedAt
+- `WorkflowAssignment`: id, entryId, entry, assignedTo, user, assignedBy, assigner, status, dueDate, createdAt, updatedAt
+- `WorkflowStats`: total, draft, in_review, ready_for_approval, approved, published, rejected
+- `SearchResult`: entries, total, page, limit, totalPages, hasNextPage, hasPreviousPage, query
+- `AuthPayload`: token, refreshToken, user
+
+#### Enums
+
+- `WorkflowStatus`: DRAFT, IN_REVIEW, READY_FOR_APPROVAL, APPROVED, PUBLISHED, REJECTED
+- `UserStatus`: ACTIVE, INACTIVE, SUSPENDED
+
+#### Scalar Types
+
+- `Time`: RFC3339 formatted timestamp
+- `JSON`: Arbitrary JSON object
+
 ---
 
 ### Auth
@@ -115,6 +263,50 @@ All endpoints require: JWT + role `admin`.
 
 ---
 
+### Projects
+All endpoints require JWT. Project access is controlled by membership.
+
+- POST `/projects`
+  - Body: `{ name (required), description? }`
+  - 201: created project (user becomes owner)
+
+- GET `/projects`
+  - 200: list of projects where user is a member
+
+- GET `/projects/:id`
+  - Requires: user must be project member
+  - 200: project details
+
+- PUT `/projects/:id`
+  - Requires: project owner or admin role
+  - Body: `{ name (required), description? }`
+  - 200: updated project
+
+- DELETE `/projects/:id`
+  - Requires: project owner only
+  - 200: success message
+
+Project Members
+- POST `/projects/:id/members`
+  - Requires: project owner or admin role
+  - Body: `{ user_id (required), role (required) }`
+  - 201: added member
+
+- GET `/projects/:id/members`
+  - Requires: project member
+  - 200: list of project members
+
+- PUT `/projects/:id/members/:member_id`
+  - Requires: project owner or admin role
+  - Body: `{ role (required) }`
+  - 200: updated member role
+
+- DELETE `/projects/:id/members/:member_id`
+  - Requires: project owner or admin role
+  - 200: removed member
+
+---
+
 ### Content
 All endpoints under `/content` require JWT. Fine-grained access controlled by permissions via `middleware.PermissionProtected`.
 
@@ -141,12 +333,15 @@ Fields
   - Body: `{ name, type, required, is_seo, unique?, max_length?, min_length?, pattern?, min_value?, max_value?, default_value?, placeholder?, help_text? }`
   - 201: field
 
-- PUT `/content/fields/:field_id` (perm: `ContentEntry:update`)
+- PUT `/content/:content_type_id/fields/:field_id` (perm: `ContentEntry:update`)
   - Body: same shape as create
   - 200: updated field with `validation_rules`
 
-- DELETE `/content/fields/:field_id` (perm: `ContentEntry:delete`)
+- DELETE `/content/:content_type_id/fields/:field_id` (perm: `ContentEntry:delete`)
   - 204
+
+- GET `/content/fields/:field_id/validation` (perm: `ContentEntry:read`)
+  - 200: field validation rules
 
 Entries
 - POST `/content/:content_type_id/entries` (perm: `ContentEntry:create`)
@@ -162,6 +357,10 @@ Entries
   - Query: `status, created_by, from, to, page, limit`
   - 200: entries with `meta`
 
+- GET `/content/entries` (perm: `ContentEntry:read`)
+  - Query: `status, created_by, from, to, page, limit, content_type_id?`
+  - 200: all entries across content types with `meta`
+
 - GET `/content/entries/:entry_id` (perm: `ContentEntry:read`)
   - 200: entry by id
 
@@ -172,9 +371,24 @@ Entries
 - DELETE `/content/entries/:entry_id` (perm: `ContentEntry:delete`)
   - 204 (blocked if published)
 
-SEO
+Translation
+- POST `/content/entries/:entry_id/translate` (perm: `ContentEntry:update`)
+  - Body: `{ target_lang (required, or inferred from Accept-Language), source_lang?, fields[] }`
+  - 200: entry with translated fields in `_i18n[target_lang]`
+
+SEO & Preview
 - GET `/content/entries/:entry_id/seo-preview` (perm: `SEO:read`)
   - 200: SEO preview payload
+
+- POST `/content/entries/:entry_id/preview-token` (perm: `ContentEntry:read`)
+  - 200: `{ token, expires_at, preview_url, frontend_preview_url? }`
+
+- GET `/content/entries/:entry_id/preview`
+  - Public (no auth required, but requires valid preview token)
+  - Query: `token` (required, or `X-Preview-Token` header)
+  - Validates preview token matches entry_id
+  - 200: full entry data with ContentType preloaded
+  - 400: missing token, 401: invalid token or token mismatch, 404: entry not found
 
 Relations
 - POST `/content/:from_content_id/relations` (perm: `ContentEntry:update`)
@@ -266,6 +480,13 @@ All endpoints require JWT. Permissions `ContentEntry:read`.
 - GET `/search/export`
   - Query: `q, status, sort_by, order_by, format=json|csv`
   - 200: file download (json implemented)
+
+- GET `/search/stats` (perm: `ContentEntry:read`)
+  - 200: `{ total_searches, unique_queries, avg_results_per_search, popular_queries[], zero_result_queries[] }`
+
+- GET `/search/suggestions` (perm: `ContentEntry:read`)
+  - Query: `q` (required)
+  - 200: `{ suggestions[], query }`
 
 ---
 

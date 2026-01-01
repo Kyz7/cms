@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net/smtp"
+	"os"
+	"regexp"
 	"time"
 
 	"github.com/Kyz7/cms/internal/database"
@@ -16,6 +18,39 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/crypto/bcrypt"
 )
+
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+
+func isValidEmail(email string) bool {
+	return emailRegex.MatchString(email) && len(email) <= 254
+}
+
+func validatePasswordStrength(password string) error {
+	if len(password) < 8 {
+		return fmt.Errorf("password must be at least 8 characters long")
+	}
+
+	hasUpper := false
+	hasLower := false
+	hasNumber := false
+
+	for _, char := range password {
+		switch {
+		case 'A' <= char && char <= 'Z':
+			hasUpper = true
+		case 'a' <= char && char <= 'z':
+			hasLower = true
+		case '0' <= char && char <= '9':
+			hasNumber = true
+		}
+	}
+
+	if !hasUpper || !hasLower || !hasNumber {
+		return fmt.Errorf("password must contain uppercase, lowercase, and numbers")
+	}
+
+	return nil
+}
 
 func RegisterHandler(c *fiber.Ctx) error {
 	var body struct {
@@ -33,6 +68,18 @@ func RegisterHandler(c *fiber.Ctx) error {
 			"name":     "name is required",
 			"email":    "email is required",
 			"password": "password is required",
+		})
+	}
+
+	if !isValidEmail(body.Email) {
+		return response.ValidationError(c, map[string]string{
+			"email": "invalid email format",
+		})
+	}
+
+	if err := validatePasswordStrength(body.Password); err != nil {
+		return response.ValidationError(c, map[string]string{
+			"password": err.Error(),
 		})
 	}
 
@@ -86,6 +133,12 @@ func LoginHandler(c *fiber.Ctx) error {
 		return response.ValidationError(c, map[string]string{
 			"email":    "email is required",
 			"password": "password is required",
+		})
+	}
+
+	if !isValidEmail(body.Email) {
+		return response.ValidationError(c, map[string]string{
+			"email": "invalid email format",
 		})
 	}
 
@@ -203,11 +256,36 @@ func ForgotPasswordHandler(c *fiber.Ctx) error {
 		return response.InternalError(c, "Failed to save reset token")
 	}
 
-	resetURL := fmt.Sprintf("http://localhost:3000/reset-password?token=%s", plainToken)
+	resetURL := fmt.Sprintf("%s/reset-password?token=%s", os.Getenv("FRONTEND_URL"), plainToken)
+	smtpHost := os.Getenv("SMTP_HOST")
+	smtpPort := os.Getenv("SMTP_PORT")
+	smtpUser := os.Getenv("SMTP_USER")
+	smtpPassword := os.Getenv("SMTP_PASSWORD")
+	smtpFrom := os.Getenv("SMTP_FROM")
+
+	if smtpHost == "" || smtpPort == "" || smtpUser == "" || smtpPassword == "" {
+		// Log error but don't expose to user
+		log.Printf("SMTP configuration missing, cannot send reset email")
+		return response.Success(c, nil, "If account exists, reset link has been sent")
+	}
+
+	if smtpFrom == "" {
+		smtpFrom = smtpUser
+	}
+
 	msg := fmt.Sprintf("Subject: Password Reset\n\nClick here to reset: %s", resetURL)
-	_ = smtp.SendMail("smtp.example.com:587",
-		smtp.PlainAuth("", "your@email.com", "password", "smtp.example.com"),
-		"your@email.com", []string{user.Email}, []byte(msg))
+
+	sendEmail := smtp.SendMail(
+		fmt.Sprintf("%s:%s", smtpHost, smtpPort),
+		smtp.PlainAuth("", smtpUser, smtpPassword, smtpHost),
+		smtpFrom,
+		[]string{user.Email},
+		[]byte(msg),
+	)
+
+	if sendEmail != nil {
+		log.Printf("Failed to send reset email: %v", err)
+	}
 
 	return response.Success(c, nil, "If account exists, reset link has been sent")
 }

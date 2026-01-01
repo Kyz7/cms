@@ -168,34 +168,62 @@ var PermissionType = graphql.NewObject(graphql.ObjectConfig{
 	},
 })
 
+// Project types - will be initialized in init() function
+var ProjectType *graphql.Object
+var ProjectMemberType *graphql.Object
+
+// Helper function to get ProjectType (lazy initialization)
+func getProjectType() *graphql.Object {
+	if ProjectType == nil {
+		initProjectTypes()
+	}
+	return ProjectType
+}
+
+// Helper function to get ProjectMemberType (lazy initialization)
+func getProjectMemberType() *graphql.Object {
+	if ProjectMemberType == nil {
+		initProjectTypes()
+	}
+	return ProjectMemberType
+}
+
 var ContentTypeType = graphql.NewObject(graphql.ObjectConfig{
 	Name: "ContentType",
-	Fields: graphql.Fields{
-		"id": &graphql.Field{
-			Type: graphql.ID,
-		},
-		"name": &graphql.Field{
-			Type: graphql.String,
-		},
-		"slug": &graphql.Field{
-			Type: graphql.String,
-		},
-		"enableSeo": &graphql.Field{
-			Type: graphql.Boolean,
-		},
-		"fields": &graphql.Field{
-			Type: graphql.NewList(ContentFieldType),
-		},
-		"seoFields": &graphql.Field{
-			Type: graphql.NewList(ContentFieldType),
-		},
-		"createdAt": &graphql.Field{
-			Type: TimeType,
-		},
-		"updatedAt": &graphql.Field{
-			Type: TimeType,
-		},
-	},
+	Fields: graphql.FieldsThunk(func() graphql.Fields {
+		return graphql.Fields{
+			"id": &graphql.Field{
+				Type: graphql.ID,
+			},
+			"name": &graphql.Field{
+				Type: graphql.String,
+			},
+			"slug": &graphql.Field{
+				Type: graphql.String,
+			},
+			"projectId": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"project": &graphql.Field{
+				Type: ProjectType, // FieldsThunk ensures this is evaluated after init()
+			},
+			"enableSeo": &graphql.Field{
+				Type: graphql.Boolean,
+			},
+			"fields": &graphql.Field{
+				Type: graphql.NewList(ContentFieldType),
+			},
+			"seoFields": &graphql.Field{
+				Type: graphql.NewList(ContentFieldType),
+			},
+			"createdAt": &graphql.Field{
+				Type: TimeType,
+			},
+			"updatedAt": &graphql.Field{
+				Type: TimeType,
+			},
+		}
+	}),
 })
 
 var ContentFieldType = graphql.NewObject(graphql.ObjectConfig{
@@ -257,44 +285,52 @@ var ContentFieldType = graphql.NewObject(graphql.ObjectConfig{
 
 var ContentEntryType = graphql.NewObject(graphql.ObjectConfig{
 	Name: "ContentEntry",
-	Fields: graphql.Fields{
-		"id": &graphql.Field{
-			Type: graphql.ID,
-		},
-		"contentTypeId": &graphql.Field{
-			Type: graphql.Int,
-		},
-		"contentType": &graphql.Field{
-			Type: ContentTypeType,
-		},
-		"data": &graphql.Field{
-			Type: JSONType,
-		},
-		"status": &graphql.Field{
-			Type: WorkflowStatusEnum,
-		},
-		"createdBy": &graphql.Field{
-			Type: graphql.Int,
-		},
-		"updatedBy": &graphql.Field{
-			Type: graphql.Int,
-		},
-		"creator": &graphql.Field{
-			Type: UserType,
-		},
-		"updater": &graphql.Field{
-			Type: UserType,
-		},
-		"createdAt": &graphql.Field{
-			Type: TimeType,
-		},
-		"updatedAt": &graphql.Field{
-			Type: TimeType,
-		},
-		"publishedAt": &graphql.Field{
-			Type: TimeType,
-		},
-	},
+	Fields: graphql.FieldsThunk(func() graphql.Fields {
+		return graphql.Fields{
+			"id": &graphql.Field{
+				Type: graphql.ID,
+			},
+			"contentTypeId": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"contentType": &graphql.Field{
+				Type: ContentTypeType,
+			},
+			"projectId": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"project": &graphql.Field{
+				Type: ProjectType, // FieldsThunk ensures this is evaluated after init()
+			},
+			"data": &graphql.Field{
+				Type: JSONType,
+			},
+			"status": &graphql.Field{
+				Type: WorkflowStatusEnum,
+			},
+			"createdBy": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"updatedBy": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"creator": &graphql.Field{
+				Type: UserType,
+			},
+			"updater": &graphql.Field{
+				Type: UserType,
+			},
+			"createdAt": &graphql.Field{
+				Type: TimeType,
+			},
+			"updatedAt": &graphql.Field{
+				Type: TimeType,
+			},
+			"publishedAt": &graphql.Field{
+				Type: TimeType,
+			},
+		}
+	}),
 })
 
 var ContentRelationType = graphql.NewObject(graphql.ObjectConfig{
@@ -605,6 +641,13 @@ func ConvertContentTypeToGraphQL(contentType *models.ContentType) map[string]int
 		"updatedAt": contentType.UpdatedAt,
 	}
 
+	if contentType.ProjectID != nil {
+		result["projectId"] = *contentType.ProjectID
+		if contentType.Project != nil {
+			result["project"] = ConvertProjectToGraphQL(contentType.Project)
+		}
+	}
+
 	if len(contentType.Fields) > 0 {
 		fields := make([]map[string]interface{}, len(contentType.Fields))
 		for i, field := range contentType.Fields {
@@ -648,6 +691,13 @@ func ConvertContentEntryToGraphQL(entry *models.ContentEntry) map[string]interfa
 		"updatedBy":     entry.UpdatedBy,
 		"createdAt":     entry.CreatedAt,
 		"updatedAt":     entry.UpdatedAt,
+	}
+
+	if entry.ProjectID != nil {
+		result["projectId"] = *entry.ProjectID
+		if entry.Project != nil {
+			result["project"] = ConvertProjectToGraphQL(entry.Project)
+		}
 	}
 
 	if entry.Creator != nil {
@@ -699,4 +749,173 @@ func ConvertContentRelationToGraphQL(rel *models.ContentRelation) map[string]int
 		"createdAt":     rel.CreatedAt,
 		"updatedAt":     rel.UpdatedAt,
 	}
+}
+
+func ConvertProjectToGraphQL(project *models.Project) map[string]interface{} {
+	result := map[string]interface{}{
+		"id":        project.ID,
+		"name":      project.Name,
+		"createdBy": project.CreatedBy,
+		"createdAt": project.CreatedAt,
+		"updatedAt": project.UpdatedAt,
+	}
+
+	if project.Description != "" {
+		result["description"] = project.Description
+	}
+
+	if project.Creator != nil {
+		result["creator"] = ConvertUserToGraphQL(project.Creator)
+	}
+
+	if len(project.Members) > 0 {
+		members := make([]map[string]interface{}, len(project.Members))
+		for i, member := range project.Members {
+			members[i] = ConvertProjectMemberToGraphQL(&member)
+		}
+		result["members"] = members
+	}
+
+	if len(project.ContentTypes) > 0 {
+		contentTypes := make([]map[string]interface{}, len(project.ContentTypes))
+		for i, ct := range project.ContentTypes {
+			contentTypes[i] = ConvertContentTypeToGraphQL(&ct)
+		}
+		result["contentTypes"] = contentTypes
+	}
+
+	return result
+}
+
+func ConvertProjectMemberToGraphQL(member *models.ProjectMember) map[string]interface{} {
+	result := map[string]interface{}{
+		"id":        member.ID,
+		"projectId": member.ProjectID,
+		"userId":    member.UserID,
+		"status":    member.Status,
+		"createdAt": member.CreatedAt,
+		"updatedAt": member.UpdatedAt,
+	}
+
+	if member.RoleID > 0 {
+		result["roleId"] = member.RoleID
+	}
+
+	if member.Role != nil {
+		result["role"] = member.Role.Name
+		result["roleDetail"] = ConvertRoleToGraphQL(member.Role)
+	}
+
+	if member.InvitedBy > 0 {
+		result["invitedBy"] = member.InvitedBy
+		if member.Inviter != nil {
+			result["inviter"] = ConvertUserToGraphQL(member.Inviter)
+		}
+	}
+
+	if member.User != nil {
+		result["user"] = ConvertUserToGraphQL(member.User)
+	}
+
+	if member.Project != nil {
+		result["project"] = ConvertProjectToGraphQL(member.Project)
+	}
+
+	return result
+}
+
+// initProjectTypes initializes Project types - can be called explicitly or via init()
+func initProjectTypes() {
+	if ProjectType != nil && ProjectMemberType != nil {
+		return // Already initialized
+	}
+
+	// Initialize ProjectMemberType first with circular reference handling
+	ProjectMemberType = graphql.NewObject(graphql.ObjectConfig{
+		Name: "ProjectMember",
+		Fields: graphql.FieldsThunk(func() graphql.Fields {
+			// Use ProjectType directly here since FieldsThunk will be evaluated later
+			return graphql.Fields{
+				"id": &graphql.Field{
+					Type: graphql.ID,
+				},
+				"projectId": &graphql.Field{
+					Type: graphql.Int,
+				},
+				"project": &graphql.Field{
+					Type: ProjectType,
+				},
+				"userId": &graphql.Field{
+					Type: graphql.Int,
+				},
+				"user": &graphql.Field{
+					Type: UserType,
+				},
+				"role": &graphql.Field{
+					Type: graphql.String,
+				},
+				"roleId": &graphql.Field{
+					Type: graphql.Int,
+				},
+				"roleDetail": &graphql.Field{
+					Type: RoleType,
+				},
+				"invitedBy": &graphql.Field{
+					Type: graphql.Int,
+				},
+				"inviter": &graphql.Field{
+					Type: UserType,
+				},
+				"status": &graphql.Field{
+					Type: graphql.String,
+				},
+				"createdAt": &graphql.Field{
+					Type: TimeType,
+				},
+				"updatedAt": &graphql.Field{
+					Type: TimeType,
+				},
+			}
+		}),
+	})
+
+	ProjectType = graphql.NewObject(graphql.ObjectConfig{
+		Name: "Project",
+		Fields: graphql.FieldsThunk(func() graphql.Fields {
+			return graphql.Fields{
+				"id": &graphql.Field{
+					Type: graphql.ID,
+				},
+				"name": &graphql.Field{
+					Type: graphql.String,
+				},
+				"description": &graphql.Field{
+					Type: graphql.String,
+				},
+				"createdBy": &graphql.Field{
+					Type: graphql.Int,
+				},
+				"creator": &graphql.Field{
+					Type: UserType,
+				},
+				"members": &graphql.Field{
+					Type: graphql.NewList(ProjectMemberType), // FieldsThunk ensures this is evaluated after init()
+				},
+				"contentTypes": &graphql.Field{
+					Type: graphql.NewList(ContentTypeType),
+				},
+				"createdAt": &graphql.Field{
+					Type: TimeType,
+				},
+				"updatedAt": &graphql.Field{
+					Type: TimeType,
+				},
+			}
+		}),
+	})
+}
+
+func init() {
+	// Initialize Project types after all other types are defined
+	initProjectTypes()
 }

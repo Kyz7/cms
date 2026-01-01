@@ -3,6 +3,7 @@ package search
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -47,7 +48,38 @@ type DateRangeFacet struct {
 	Newest time.Time `json:"newest"`
 }
 
+func validateFieldNames(fields []string, contentTypeID uint) ([]string, error) {
+	if len(fields) == 0 {
+		return fields, nil
+	}
+
+	var ct models.ContentType
+	if err := database.DB.Preload("Fields").Preload("SEOFields").
+		First(&ct, contentTypeID).Error; err != nil {
+		return nil, fmt.Errorf("content type not found")
+	}
+
+	allowedFields := make(map[string]bool)
+	allFields := append(ct.Fields, ct.SEOFields...)
+	for _, f := range allFields {
+		allowedFields[f.Name] = true
+	}
+
+	validatedFields := []string{}
+	for _, field := range fields {
+		if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(field) {
+			continue
+		}
+		if allowedFields[field] {
+			validatedFields = append(validatedFields, field)
+		}
+	}
+
+	return validatedFields, nil
+}
+
 func FullTextSearch(params SearchParams) (*SearchResult, error) {
+	// 1. Sanitasi Parameter
 	if params.Page <= 0 {
 		params.Page = 1
 	}
@@ -66,75 +98,78 @@ func FullTextSearch(params SearchParams) (*SearchResult, error) {
 
 	query := database.DB.Model(&models.ContentEntry{})
 
+	// 2. Filter Dasar
 	if len(params.ContentTypeIDs) > 0 {
 		query = query.Where("content_type_id IN ?", params.ContentTypeIDs)
 	}
-
 	if params.Status != "" {
 		query = query.Where("status = ?", params.Status)
 	}
-
 	if params.CreatedBy > 0 {
 		query = query.Where("created_by = ?", params.CreatedBy)
 	}
 
+	// 3. Filter Tanggal
 	if params.FromDate != "" {
-		fromDate, err := time.Parse("2006-01-02", params.FromDate)
-		if err == nil {
+		if fromDate, err := time.Parse("2006-01-02", params.FromDate); err == nil {
 			query = query.Where("created_at >= ?", fromDate)
 		}
 	}
 	if params.ToDate != "" {
-		toDate, err := time.Parse("2006-01-02", params.ToDate)
-		if err == nil {
-			toDate = toDate.Add(24 * time.Hour)
-			query = query.Where("created_at < ?", toDate)
+		if toDate, err := time.Parse("2006-01-02", params.ToDate); err == nil {
+			// Gunakan akhir hari (23:59:59) agar pencarian inklusif
+			query = query.Where("created_at <= ?", toDate.Add(23*time.Hour+59*time.Minute+59*time.Second))
 		}
 	}
 
+	// 4. Pencarian Teks (FIX: Kirim ContentTypeID pertama jika ada)
 	if params.Query != "" {
-		query = applyFullTextSearch(query, params)
+		var ctID uint
+		if len(params.ContentTypeIDs) > 0 {
+			ctID = params.ContentTypeIDs[0]
+		}
+		query = applyFullTextSearch(query, params, ctID)
 	}
 
 	if len(params.Tags) > 0 {
 		query = applyTagFilter(query, params.Tags)
 	}
 
+	// 5. Hitung Total
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, err
 	}
 
+	// 6. Sorting & Pagination
 	query = applySorting(query, params)
-
 	offset := (params.Page - 1) * params.Limit
-	query = query.Offset(offset).Limit(params.Limit)
-
-	query = query.Preload("Creator").Preload("Updater")
 
 	var entries []models.ContentEntry
-	if err := query.Find(&entries).Error; err != nil {
+	err := query.Preload("Creator").
+		Preload("Updater").
+		Offset(offset).
+		Limit(params.Limit).
+		Find(&entries).Error
+
+	if err != nil {
 		return nil, err
 	}
 
-	totalPages := total / int64(params.Limit)
-	if total%int64(params.Limit) > 0 {
-		totalPages++
-	}
+	// 7. Kalkulasi Meta
+	totalPages := (total + int64(params.Limit) - 1) / int64(params.Limit)
 
-	result := &SearchResult{
+	return &SearchResult{
 		Entries:    entries,
 		Total:      total,
 		Page:       params.Page,
 		Limit:      params.Limit,
 		TotalPages: totalPages,
 		Query:      params.Query,
-	}
-
-	return result, nil
+	}, nil
 }
 
-func applyFullTextSearch(query *gorm.DB, params SearchParams) *gorm.DB {
+func applyFullTextSearch(query *gorm.DB, params SearchParams, contentTypeID uint) *gorm.DB {
 	searchQuery := strings.TrimSpace(params.Query)
 	if searchQuery == "" {
 		return query
@@ -144,35 +179,47 @@ func applyFullTextSearch(query *gorm.DB, params SearchParams) *gorm.DB {
 
 	if dbDialect == "postgres" {
 		if len(params.Fields) > 0 {
+			validatedFields, err := validateFieldNames(params.Fields, contentTypeID)
+			if err != nil || len(validatedFields) == 0 {
+				return query
+			}
+
 			var conditions []string
 			var args []any
 
-			for _, field := range params.Fields {
-				conditions = append(conditions, fmt.Sprintf("data->>'%s' ILIKE ?", field))
-				args = append(args, "%"+searchQuery+"%")
+			for _, field := range validatedFields {
+				// FIX: Gunakan ->> untuk mendapatkan teks (bukan objek JSON) agar ILIKE bekerja dengan benar
+				conditions = append(conditions, "data->>? ILIKE ?")
+				args = append(args, field, "%"+searchQuery+"%")
 			}
 
 			whereClause := strings.Join(conditions, " OR ")
-			query = query.Where(whereClause, args...)
+			query = query.Where("("+whereClause+")", args...) // Bungkus kurung untuk keamanan logika OR
 		} else {
-			tsQuery := strings.ReplaceAll(searchQuery, " ", " & ")
+			// FIX: plainto_tsquery sudah otomatis menangani spasi, tidak perlu replace ke '&'
 			query = query.Where(
 				"to_tsvector('english', data::text) @@ plainto_tsquery('english', ?)",
-				tsQuery,
+				searchQuery,
 			)
 		}
 	} else {
+		// SQLite Logic
 		if len(params.Fields) > 0 {
+			validatedFields, err := validateFieldNames(params.Fields, contentTypeID)
+			if err != nil || len(validatedFields) == 0 {
+				return query
+			}
+
 			var conditions []string
 			var args []interface{}
 
-			for _, field := range params.Fields {
-				conditions = append(conditions, "json_extract(data, '$."+field+"') LIKE ?")
-				args = append(args, "%"+searchQuery+"%")
+			for _, field := range validatedFields {
+				conditions = append(conditions, "json_extract(data, ?) LIKE ?")
+				args = append(args, "$."+field, "%"+searchQuery+"%")
 			}
 
 			whereClause := strings.Join(conditions, " OR ")
-			query = query.Where(whereClause, args...)
+			query = query.Where("("+whereClause+")", args...)
 		} else {
 			query = query.Where("data LIKE ?", "%"+searchQuery+"%")
 		}
@@ -239,42 +286,51 @@ func GetSearchFacets(params SearchParams) (*SearchFacets, error) {
 		DateRange:    &DateRangeFacet{},
 	}
 
-	query := database.DB.Model(&models.ContentEntry{})
+	baseQuery := database.DB.Model(&models.ContentEntry{})
 
 	if params.Query != "" {
-		_ = applyFullTextSearch(query, params)
+		var ctID uint
+		if len(params.ContentTypeIDs) > 0 {
+			ctID = params.ContentTypeIDs[0]
+		}
+		baseQuery = applyFullTextSearch(baseQuery, params, ctID)
+	}
+	if len(params.ContentTypeIDs) > 0 {
+		baseQuery = baseQuery.Where("content_type_id IN ?", params.ContentTypeIDs)
 	}
 
-	var contentTypeCounts []struct {
-		ContentTypeID uint
-		Count         int64
+	type ctResult struct {
+		Name  string
+		Count int64
 	}
-	database.DB.Model(&models.ContentEntry{}).
-		Select("content_type_id, count(*) as count").
-		Group("content_type_id").
-		Scan(&contentTypeCounts)
+	var ctResults []ctResult
+	err := baseQuery.Session(&gorm.Session{}).
+		Select("content_types.name, count(content_entries.id) as count").
+		Joins("JOIN content_types ON content_types.id = content_entries.content_type_id").
+		Group("content_types.name").
+		Scan(&ctResults).Error
 
-	for _, ct := range contentTypeCounts {
-		var contentType models.ContentType
-		if err := database.DB.First(&contentType, ct.ContentTypeID).Error; err == nil {
-			facets.ContentTypes[contentType.Name] = ct.Count
+	if err == nil {
+		for _, r := range ctResults {
+			facets.ContentTypes[r.Name] = r.Count
 		}
 	}
 
-	var statusCounts []struct {
+	type stResult struct {
 		Status string
 		Count  int64
 	}
-	database.DB.Model(&models.ContentEntry{}).
+	var stResults []stResult
+	baseQuery.Session(&gorm.Session{}).
 		Select("status, count(*) as count").
 		Group("status").
-		Scan(&statusCounts)
+		Scan(&stResults)
 
-	for _, sc := range statusCounts {
-		facets.Statuses[sc.Status] = sc.Count
+	for _, r := range stResults {
+		facets.Statuses[r.Status] = r.Count
 	}
 
-	database.DB.Model(&models.ContentEntry{}).
+	baseQuery.Session(&gorm.Session{}).
 		Select("MIN(created_at) as oldest, MAX(created_at) as newest").
 		Scan(facets.DateRange)
 
@@ -370,6 +426,13 @@ func AutoComplete(field, prefix string, contentTypeID uint, limit int) ([]string
 		limit = 10
 	}
 
+	// ✅ VALIDASI FIELD NAME
+	validatedFields, err := validateFieldNames([]string{field}, contentTypeID)
+	if err != nil || len(validatedFields) == 0 {
+		return nil, fmt.Errorf("invalid field name: %s", field)
+	}
+	validatedField := validatedFields[0]
+
 	var suggestions []string
 	dbDialect := database.DB.Dialector.Name()
 
@@ -377,15 +440,16 @@ func AutoComplete(field, prefix string, contentTypeID uint, limit int) ([]string
 		Where("content_type_id = ?", contentTypeID)
 
 	if dbDialect == "postgres" {
+		// ✅ GUNAKAN PARAMETER BINDING
 		query.Distinct().
-			Select(fmt.Sprintf("data->>'%s' as suggestion", field)).
-			Where(fmt.Sprintf("data->>'%s' ILIKE ?", field), prefix+"%").
+			Select("data->? as suggestion", validatedField).
+			Where("data->? ILIKE ?", validatedField, prefix+"%").
 			Limit(limit).
 			Pluck("suggestion", &suggestions)
 	} else {
 		query.Distinct().
-			Select(fmt.Sprintf("json_extract(data, '$.%s') as suggestion", field)).
-			Where(fmt.Sprintf("json_extract(data, '$.%s') LIKE ?", field), prefix+"%").
+			Select("json_extract(data, ?) as suggestion", "$."+validatedField).
+			Where("json_extract(data, ?) LIKE ?", "$."+validatedField, prefix+"%").
 			Limit(limit).
 			Pluck("suggestion", &suggestions)
 	}

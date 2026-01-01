@@ -1,6 +1,8 @@
 package server
 
 import (
+	"os"
+	"strings"
 	"time"
 
 	"github.com/Kyz7/cms/internal/auth"
@@ -17,6 +19,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/csrf"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"gorm.io/gorm"
@@ -25,10 +28,33 @@ import (
 func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	// Middleware
 	app.Use(logger.New())
+
+	corsOrigins := os.Getenv("CORS_ORIGINS")
+	if corsOrigins == "" {
+		corsOrigins = "http://localhost:3000,http://localhost:8080"
+	}
+	originsList := strings.Split(corsOrigins, ",")
+	for i, origin := range originsList {
+		originsList[i] = strings.TrimSpace(origin)
+	}
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
-		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+		AllowOrigins:     strings.Join(originsList, ","),
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+		AllowCredentials: true,
+		MaxAge:           3600,
+	}))
+
+	app.Use(csrf.New(csrf.Config{
+		KeyLookup:      "header:X-CSRF-Token",
+		CookieName:     "csrf_",
+		CookieSameSite: "Lax",
+		CookieHTTPOnly: true,
+		CookieSecure:   os.Getenv("APP_ENV") == "production",
+		Expiration:     1 * time.Hour,
+		Next: func(c *fiber.Ctx) bool {
+			return c.Path() == "/health"
+		},
 	}))
 
 	// Health check
@@ -37,6 +63,21 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 			"status":  "ok",
 			"message": "CMS API is running",
 		})
+	})
+
+	app.Get("/csrf-token", func(c *fiber.Ctx) error {
+		// Ambil token dari locals (pastikan route ini TIDAK di-skip di fungsi Next)
+		token, ok := c.Locals("csrf").(string)
+		if !ok {
+			// Jika locals kosong, coba ambil dari header response yang sudah diset middleware
+			token = c.GetRespHeader("X-CSRF-Token")
+		}
+
+		if token == "" {
+			return c.Status(500).JSON(fiber.Map{"error": "Check middleware order"})
+		}
+
+		return c.JSON(fiber.Map{"csrf_token": token})
 	})
 
 	// ==========================================

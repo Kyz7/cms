@@ -1,0 +1,61 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+README.md
+SECURITY_*.md
+GRAPHQL_API.md
+REST_API.md
+SWAGGER_SETUP.md
+preview.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Build artifacts
+cms
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+testutils/
+
+# Uploads (akan dibuat di container)
+uploads/
+internal/*/uploads/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# GraphQL generated files (akan di-generate saat build jika perlu)
+graph/model/
+
+# OpenAPI (optional, bisa di-copy jika diperlukan)
+# openapi.yaml
+
+

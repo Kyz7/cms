@@ -18,9 +18,9 @@ func main() {
 	cfg := config.Load()
 
 	if err := utils.ValidateJWTSecret(); err != nil {
-		log.Fatal("❌ JWT Configuration Error: ", err)
+		log.Fatal("JWT Configuration Error: ", err)
 	}
-	log.Println("✅ JWT secret validated")
+	log.Println("JWT secret validated")
 
 	requiredEnvVars := map[string]string{
 		"DB_HOST":     os.Getenv("DB_HOST"),

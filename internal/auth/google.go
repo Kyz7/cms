@@ -43,7 +43,6 @@ var (
 func generateState() string {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		// fallback to timestamp-based state if crypto fails (very unlikely)
 		return base64.URLEncoding.EncodeToString([]byte(time.Now().String()))
 	}
 	return base64.URLEncoding.EncodeToString(b)

@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  # Database Postgres di dalam Docker
+  db:
+    image: postgres:15-alpine
+    container_name: postgres_cms
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: passwordtest
+      POSTGRES_DB: db_cms
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # Aplikasi Go
+  app:
+    build: .
+    container_name: go_cms_app
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=db_cms
+      - DB_USER=postgres
+      - DB_PASSWORD=passwordtest
+      - JWT_SECRET=inisangatsangatrahasiainisangatsangatrahasiainisangatsangatrahasia #32 characters
+      - APP_ENV=development #development or production
+    depends_on:
+      - db
+
+volumes:
+  pgdata:

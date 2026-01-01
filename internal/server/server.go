@@ -17,13 +17,6 @@ func New(db *gorm.DB) *fiber.App {
 		MaxAge:    3600,
 	})
 
-	// 	app.Use(csrf.New(csrf.Config{
-	//     KeyLookup:      "header:X-CSRF-Token",
-	//     CookieName:     "csrf_",
-	//     CookieSameSite: "Strict",
-	//     Expiration:     1 * time.Hour,
-	// }))
-
 	SetupRoutes(app, db)
 
 	return app

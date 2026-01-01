@@ -1,12 +1,20 @@
 package user
 
 import (
+	"regexp"
+
 	"github.com/Kyz7/cms/internal/database"
 	"github.com/Kyz7/cms/internal/models"
 	"github.com/Kyz7/cms/internal/response"
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/crypto/bcrypt"
 )
+
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+
+func isValidEmail(email string) bool {
+	return emailRegex.MatchString(email) && len(email) <= 254
+}
 
 // CreateUserHandler menangani pembuatan pengguna baru dan memastikan Role yang diberikan adalah Role Global.
 func CreateUserHandler(c *fiber.Ctx) error {
@@ -27,6 +35,11 @@ func CreateUserHandler(c *fiber.Ctx) error {
 			"email":    "email is required",
 			"password": "password is required",
 			"name":     "name is required",
+		})
+	}
+	if !isValidEmail(body.Email) {
+		return response.ValidationError(c, map[string]string{
+			"email": "invalid email format",
 		})
 	}
 
@@ -128,6 +141,12 @@ func UpdateUserHandler(c *fiber.Ctx) error {
 		return response.NotFound(c, "User")
 	}
 
+	if !isValidEmail(body.Email) {
+		return response.ValidationError(c, map[string]string{
+			"email": "invalid email format",
+		})
+	}
+
 	// 1. Update Email
 	if body.Email != "" && body.Email != user.Email {
 		var existing models.User
@@ -180,9 +199,6 @@ func DeleteUserHandler(c *fiber.Ctx) error {
 	if uint(id) == currentUserID {
 		return response.BadRequest(c, "Cannot delete your own account", nil)
 	}
-
-	// Catatan: Jika user memiliki project_members, Anda mungkin perlu menghapus entri project_members
-	// terlebih dahulu untuk menjaga integritas relasi.
 
 	if err := database.DB.Delete(&user).Error; err != nil {
 		return response.InternalError(c, "Failed to delete user")
