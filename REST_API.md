@@ -240,7 +240,7 @@ All endpoints require: JWT + role `admin`.
   - 200: list roles with permissions
 
 - POST `/roles`
-  - Body: `{ name, description?, permissions: [{ module, action, field_scope?, allowed_fields?, denied_fields?, content_type_ids? }] }`
+  - Body: `{ name, description?, is_global?, permissions: [{ module, action, field_scope?, allowed_fields?, denied_fields?, content_type_ids? }] }`
   - 201: created role
 
 - GET `/roles/:id`
@@ -260,6 +260,58 @@ All endpoints require: JWT + role `admin`.
 - POST `/roles/assign`
   - Body: `{ user_id, role_id }`
   - 200: user with assigned role
+
+Role permissions
+
+Each role can have one or more permission objects in the `permissions` array:
+
+```json
+{
+  "module": "ContentEntry",
+  "action": "update",
+  "field_scope": "custom",
+  "allowed_fields": ["title", "slug"],
+  "denied_fields": ["internal_notes"],
+  "content_type_ids": [1, 2]
+}
+```
+
+- **module**:
+  - Global:
+    - `ContentEntry`: mengatur izin untuk entry konten global (create/read/update/delete/approve).
+    - `ContentType`: mengatur izin untuk skema konten global (content types & fields).
+    - `Media`: media library global (files & folders).
+    - `SEO`: operasi terkait SEO (preview, SEO fields).
+  - Project:
+    - `ProjectContent`: entry konten di dalam project tertentu.
+    - `ProjectMedia`: media di dalam project.
+    - `ProjectSchema`: skema/tipe konten milik project.
+    - `ProjectSettings`: konfigurasi project (nama, deskripsi, dsb).
+    - `ProjectMembers`: manajemen member project (invite/read/update/remove).
+    - `ProjectOwnership`: aksi khusus seperti transfer kepemilikan project.
+
+- **action**:
+  - Umum: `create`, `read`, `update`, `delete`.
+  - Khusus konten/workflow: `approve`, `publish`.
+  - Khusus project: `invite`, `remove`, `transfer` (kepemilikan), dll sesuai modul yang digunakan.
+
+- **field_scope** (khusus untuk operasi tulis konten, mis. `ContentEntry` / `ProjectContent`):
+  - `all`: boleh menulis semua field.
+  - `seo_only`: hanya boleh menulis field SEO (mis. `meta_title`, `meta_description`, dsb).
+  - `non_seo_only`: hanya boleh menulis field non-SEO (konten utama).
+  - `custom`: gunakan `allowed_fields` / `denied_fields` untuk pengaturan granular.
+
+- **allowed_fields** (opsional, dipakai jika `field_scope = "custom"`):
+  - Daftar nama field yang **boleh** diubah (contoh: `["title", "slug"]`).
+  - Jika diisi, hanya field-field ini yang akan diproses saat tulis; field lain akan diabaikan.
+
+- **denied_fields** (opsional, dipakai jika `field_scope = "custom"`):
+  - Daftar nama field yang **tidak boleh** diubah, meskipun ada di `allowed_fields`.
+  - Berguna untuk memblokir field sensitif (mis. `["internal_notes", "cost_price"]`).
+
+- **content_type_ids** (opsional, biasanya untuk `ContentEntry` / `ProjectContent`):
+  - Daftar ID Content Type yang boleh diakses oleh permission ini (contoh: `[1, 2, 3]`).
+  - Jika kosong atau tidak diisi, permission berlaku untuk **semua** content type.
 
 ---
 

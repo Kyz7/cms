@@ -13,6 +13,16 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  parameters:
+    CsrfTokenHeader:
+      name: X-CSRF-Token
+      in: header
+      required: false
+      schema:
+        type: string
+      description: >
+        CSRF protection token. Obtain it by calling the `/csrf-token` endpoint
+        and include it in state-changing requests (e.g., POST/PUT/DELETE).
   schemas:
     ApiResponse:
       type: object
@@ -49,15 +59,34 @@ components:
       type: object
       required: [name, email, password]
       properties:
-        name: { type: string }
-        email: { type: string, format: email }
-        password: { type: string, format: password }
+        name:
+          type: string
+          description: Nama lengkap pengguna yang akan didaftarkan.
+          example: "John Doe"
+        email:
+          type: string
+          format: email
+          description: Alamat email pengguna. Harus dalam format email yang valid dan unik.
+          example: "john.doe@example.com"
+        password:
+          type: string
+          format: password
+          description: Kata sandi untuk akun pengguna. Disarankan minimal 8 karakter dengan kombinasi huruf, angka, dan karakter khusus.
+          example: "SecurePassword123!"
     LoginRequest:
       type: object
       required: [email, password]
       properties:
-        email: { type: string, format: email }
-        password: { type: string, format: password }
+        email:
+          type: string
+          format: email
+          description: Alamat email yang terdaftar di sistem.
+          example: "john.doe@example.com"
+        password:
+          type: string
+          format: password
+          description: Kata sandi yang sesuai dengan akun email tersebut.
+          example: "SecurePassword123!"
     RefreshRequest:
       type: object
       required: [user_id, refresh_token]
@@ -76,30 +105,76 @@ components:
           items:
             type: object
             properties:
-              module: { type: string }
-              action: { type: string }
-              field_scope: { type: string }
+              module:
+                type: string
+                description: >
+                  Modul/area yang diizinkan.
+                  Nilai yang umum digunakan:
+                  - `ContentEntry`: entri konten global (create/read/update/delete/approve)
+                  - `ContentType`: tipe/skema konten global
+                  - `Media`: media library global (file & folder)
+                  - `SEO`: operasi terkait SEO (preview dan pengelolaan field SEO)
+                  - `ProjectContent`: konten di dalam sebuah project
+                  - `ProjectMedia`: media di dalam sebuah project
+                  - `ProjectSchema`: skema/tipe konten milik project
+                  - `ProjectSettings`, `ProjectMembers`, `ProjectOwnership`: aksi administrasi project.
+              action:
+                type: string
+                description: >
+                  Jenis operasi pada modul tersebut.
+                  Contoh nilai: `create`, `read`, `update`, `delete`, `approve`, `publish`,
+                  `invite`, `remove`, `transfer` (untuk kepemilikan project), dll tergantung modul.
+              field_scope:
+                type: string
+                nullable: true
+                description: >
+                  Mengatur field mana yang boleh ditulis untuk operasi konten:
+                  - `all`: boleh menulis semua field.
+                  - `seo_only`: hanya boleh menulis field SEO.
+                  - `non_seo_only`: hanya boleh menulis field non-SEO.
+                  - `custom`: gunakan `allowed_fields` / `denied_fields` untuk kontrol lebih rinci.
               allowed_fields:
                 type: array
                 items: { type: string }
+                description: >
+                  Dipakai ketika `field_scope` bernilai `custom`.
+                  Berisi daftar nama field yang diizinkan untuk ditulis (misal `["judul","slug"]`).
               denied_fields:
                 type: array
                 items: { type: string }
+                description: >
+                  Dipakai ketika `field_scope` bernilai `custom`.
+                  Berisi daftar nama field yang secara eksplisit **dilarang** ditulis.
               content_type_ids:
                 type: array
                 items: { type: integer }
+                description: >
+                  (Opsional) Daftar ID Content Type yang dibatasi oleh permission ini.
+                  Jika kosong atau tidak diisi, permission berlaku untuk semua Content Type.
     CreateProjectRequest:
       type: object
       required: [name]
       properties:
-        name: { type: string }
-        description: { type: string }
+        name:
+          type: string
+          description: Nama project yang akan dibuat. Nama ini akan digunakan untuk identifikasi project.
+          example: "Website Perusahaan"
+        description:
+          type: string
+          description: Deskripsi singkat tentang project. Opsional, dapat digunakan untuk memberikan informasi tambahan tentang tujuan project.
+          example: "Project untuk mengelola konten website perusahaan"
     UpdateProjectRequest:
       type: object
       required: [name]
       properties:
-        name: { type: string }
-        description: { type: string }
+        name:
+          type: string
+          description: Nama baru untuk project. Harus diisi.
+          example: "Website Perusahaan - Updated"
+        description:
+          type: string
+          description: Deskripsi baru untuk project. Opsional, dapat diisi untuk memperbarui deskripsi project.
+          example: "Project untuk mengelola konten website perusahaan dengan fitur terbaru"
     AddProjectMemberRequest:
       type: object
       required: [user_id, role]
@@ -115,44 +190,179 @@ components:
       type: object
       required: [name, slug]
       properties:
-        name: { type: string }
-        slug: { type: string }
-        project_id: { type: integer, nullable: true }
+        name:
+          type: string
+          description: Nama Content Type yang akan dibuat. Nama ini akan ditampilkan di antarmuka admin.
+          example: "Artikel Blog"
+        slug:
+          type: string
+          description: >
+            Identifier unik untuk Content Type ini. Biasanya menggunakan format lowercase dengan underscore atau dash.
+            Slug digunakan di URL dan API endpoint. Harus unik di seluruh sistem.
+          example: "artikel_blog"
+        project_id:
+          type: integer
+          nullable: true
+          description: >
+            (Opsional) ID project untuk membuat Content Type yang terbatas pada project tertentu.
+            - Jika diabaikan atau `null`: Content Type bersifat **global** (dapat diakses oleh semua user dengan permission yang sesuai).
+            - Jika diisi dengan ID project yang valid: Content Type bersifat **project-scoped** (hanya dapat diakses oleh anggota project tersebut).
+          example: 1
     AddFieldRequest:
       type: object
       required: [name, type]
       properties:
-        name: { type: string }
-        type: { type: string }
-        required: { type: boolean }
-        is_seo: { type: boolean }
-        unique: { type: boolean }
-        max_length: { type: integer, nullable: true }
-        min_length: { type: integer, nullable: true }
-        pattern: { type: string, nullable: true }
-        min_value: { type: number, nullable: true }
-        max_value: { type: number, nullable: true }
-        default_value: { type: string, nullable: true }
-        placeholder: { type: string, nullable: true }
-        help_text: { type: string, nullable: true }
+        name:
+          type: string
+          description: Nama field yang akan dibuat. Harus unik dalam satu Content Type.
+          example: "judul_artikel"
+        type:
+          type: string
+          description: >
+            Tipe data field. Nilai yang valid:
+            - `string`: teks biasa
+            - `text`: teks panjang (textarea)
+            - `number`: angka (integer atau decimal)
+            - `boolean`: true/false
+            - `date`: tanggal
+            - `email`: alamat email (dengan validasi format email)
+            - `url`: URL (dengan validasi format URL)
+            - `media`: file/media (gambar, video, dokumen)
+          example: "string"
+        required:
+          type: boolean
+          description: Menentukan apakah field ini wajib diisi saat membuat atau mengupdate entri konten. Jika `true`, field harus memiliki nilai.
+          example: true
+        is_seo:
+          type: boolean
+          description: >
+            Menentukan apakah field ini merupakan field SEO.
+            - Jika `true`, field ini akan dikategorikan sebagai field SEO dan dapat digunakan untuk optimasi SEO (meta title, meta description, dll).
+            - Jika `false`, field ini adalah field konten biasa.
+          example: false
+        unique:
+          type: boolean
+          description: >
+            Menentukan apakah nilai field ini harus unik di semua entri konten dengan Content Type yang sama.
+            - Jika `true`, tidak boleh ada dua entri dengan nilai yang sama untuk field ini.
+            - Jika `false`, nilai boleh duplikat.
+          example: false
+        max_length:
+          type: integer
+          nullable: true
+          description: >
+            Panjang maksimum karakter untuk field bertipe `string` atau `text`.
+            Jika diisi, nilai field tidak boleh melebihi jumlah karakter ini.
+            Opsional, hanya berlaku untuk field bertipe string/text.
+          example: 255
+        min_length:
+          type: integer
+          nullable: true
+          description: >
+            Panjang minimum karakter untuk field bertipe `string` atau `text`.
+            Jika diisi, nilai field harus memiliki minimal jumlah karakter ini.
+            Opsional, hanya berlaku untuk field bertipe string/text.
+          example: 10
+        pattern:
+          type: string
+          nullable: true
+          description: >
+            Pola regex untuk validasi format field bertipe `string` atau `text`.
+            Nilai field harus sesuai dengan pola regex yang ditentukan.
+            Opsional, hanya berlaku untuk field bertipe string/text.
+          example: "^[A-Za-z0-9]+$"
+        min_value:
+          type: number
+          nullable: true
+          description: >
+            Nilai minimum untuk field bertipe `number`.
+            Jika diisi, nilai field tidak boleh kurang dari nilai ini.
+            Opsional, hanya berlaku untuk field bertipe number.
+          example: 0
+        max_value:
+          type: number
+          nullable: true
+          description: >
+            Nilai maksimum untuk field bertipe `number`.
+            Jika diisi, nilai field tidak boleh melebihi nilai ini.
+            Opsional, hanya berlaku untuk field bertipe number.
+          example: 100
+        default_value:
+          type: string
+          nullable: true
+          description: >
+            Nilai default yang akan digunakan jika field tidak diisi saat membuat entri konten baru.
+            Opsional, dapat digunakan untuk field apapun.
+          example: "Draft"
+        placeholder:
+          type: string
+          nullable: true
+          description: >
+            Teks placeholder yang akan ditampilkan di form input untuk membantu user memahami format yang diharapkan.
+            Opsional, biasanya digunakan untuk field bertipe string/text.
+          example: "Masukkan judul artikel..."
+        help_text:
+          type: string
+          nullable: true
+          description: >
+            Teks bantuan yang menjelaskan kegunaan atau aturan field ini.
+            Akan ditampilkan di form untuk membantu user memahami cara menggunakan field.
+            Opsional.
+          example: "Judul artikel akan ditampilkan di halaman depan dan hasil pencarian."
     CreateRelationRequest:
       type: object
       required: [to_content_id, relation_type]
       properties:
-        to_content_id: { type: integer }
-        relation_type: { type: string }
+        to_content_id:
+          type: integer
+          description: ID entri konten target yang akan dihubungkan dengan entri konten saat ini.
+          example: 5
+        relation_type:
+          type: string
+          description: >
+            Jenis relasi antara dua entri konten. Contoh nilai:
+            - `related`: konten terkait
+            - `parent`: konten induk
+            - `child`: konten anak
+            - `similar`: konten serupa
+            - atau nilai custom sesuai kebutuhan
+          example: "related"
     ChangeStatusRequest:
       type: object
       required: [status]
       properties:
-        status: { type: string }
-        comment: { type: string }
+        status:
+          type: string
+          description: >
+            Status workflow baru untuk entri konten. Nilai yang valid:
+            - `draft`: draft (belum dipublikasikan)
+            - `in_review`: sedang dalam review
+            - `ready_for_approval`: siap untuk disetujui
+            - `approved`: telah disetujui
+            - `published`: telah dipublikasikan
+            - `rejected`: ditolak
+          example: "in_review"
+        comment:
+          type: string
+          description: Komentar opsional yang menjelaskan alasan perubahan status.
+          example: "Perlu review dari editor sebelum publish"
     AssignEntryRequest:
       type: object
       required: [assigned_to]
       properties:
-        assigned_to: { type: integer }
-        due_date: { type: string, format: date-time, nullable: true }
+        assigned_to:
+          type: integer
+          description: ID user yang akan ditugaskan untuk menangani entri konten ini.
+          example: 3
+        due_date:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Tanggal batas waktu (deadline) untuk menyelesaikan tugas ini.
+            Format: ISO 8601 date-time (contoh: "2024-01-15T10:30:00Z").
+            Opsional, dapat diisi untuk memberikan batas waktu.
+          example: "2024-12-31T23:59:59Z"
     SearchAdvancedRequest:
       type: object
       properties:
@@ -182,14 +392,22 @@ components:
       properties:
         target_lang:
           type: string
-          description: Target language code (e.g., "en", "id"). If omitted, inferred from Accept-Language header.
+          description: >
+            Kode bahasa target untuk terjemahan (contoh: "id" untuk Bahasa Indonesia, "en" untuk Bahasa Inggris).
+            Jika tidak diisi, akan diambil dari header `Accept-Language` dari request.
+          example: "id"
         source_lang:
           type: string
-          description: Source language code; if omitted, auto-detected by Google Translate.
+          description: >
+            Kode bahasa sumber. Jika tidak diisi, sistem akan mendeteksi bahasa secara otomatis menggunakan Google Translate.
+          example: "en"
         fields:
           type: array
-          description: Specific fields to translate; if empty or omitted, translates all string fields.
           items: { type: string }
+          description: >
+            Daftar nama field yang akan diterjemahkan. Jika kosong atau tidak diisi, semua field bertipe string akan diterjemahkan.
+            Contoh: `["judul", "deskripsi", "konten"]`
+          example: ["judul", "deskripsi"]
 
 tags:
   - name: Health
@@ -212,6 +430,26 @@ paths:
       responses:
         '200':
           description: OK
+  /csrf-token:
+    get:
+      tags: [Health]
+      summary: Get CSRF token
+      description: >
+        Returns a CSRF token that must be sent in the `X-CSRF-Token` header
+        for state-changing requests (e.g., POST/PUT/DELETE).
+        The server also manages a CSRF cookie as part of the protection.
+      security: []
+      responses:
+        '200':
+          description: CSRF token generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  csrf_token:
+                    type: string
+                    description: CSRF token to be sent in the `X-CSRF-Token` header.
   /auth/register:
     post:
       tags: [Auth]
@@ -588,7 +826,13 @@ paths:
     get:
       tags: [Content]
       summary: Get all accessible content entries (Global and Project)
-      description: Retrieves all content entries where the user has either global read permission (ContentEntry:read) OR project read permission for the entry's parent project.
+      description: >
+        Retrieves all content entries where the user has either global read
+        permission (`ContentEntry:read`) OR project read permission for the
+        entry's parent project.
+
+        Global entries have `project_id` omitted or null; project entries have
+        `project_id` set to the owning project.
       operationId: getAccessibleEntries
       parameters:
         - in: query 

@@ -39,7 +39,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	}
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     strings.Join(originsList, ","),
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-CSRF-Token",
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS, PATCH",
 		AllowCredentials: true,
 		MaxAge:           3600,
@@ -53,7 +53,19 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 		CookieSecure:   os.Getenv("APP_ENV") == "production",
 		Expiration:     1 * time.Hour,
 		Next: func(c *fiber.Ctx) bool {
-			return c.Path() == "/health"
+			path := c.Path()
+			if path == "/health" || path == "/csrf-token" || strings.HasPrefix(path, "/swagger") || path == "/openapi.yaml" {
+				return true
+			}
+			// Skip CSRF for auth endpoints (except logout which requires JWT)
+			if strings.HasPrefix(path, "/auth/") && path != "/auth/logout" {
+				return true
+			}
+			// Skip CSRF for GraphQL endpoints (they use JWT authentication)
+			if strings.HasPrefix(path, "/graphql") {
+				return true
+			}
+			return false
 		},
 	}))
 
@@ -66,10 +78,8 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	})
 
 	app.Get("/csrf-token", func(c *fiber.Ctx) error {
-		// Ambil token dari locals (pastikan route ini TIDAK di-skip di fungsi Next)
 		token, ok := c.Locals("csrf").(string)
 		if !ok {
-			// Jika locals kosong, coba ambil dari header response yang sudah diset middleware
 			token = c.GetRespHeader("X-CSRF-Token")
 		}
 

@@ -48,16 +48,30 @@
                     if (token) {
                         request.headers.Authorization = 'Bearer ' + token;
                     }
+
+                    // Add X-CSRF-Token header if available
+                    const csrfToken = localStorage.getItem('csrf_token');
+                    if (csrfToken) {
+                        request.headers['X-CSRF-Token'] = csrfToken;
+                    }
+
                     return request;
                 },
                 onComplete: function() {
                     // Add login/logout functionality
                     const authButton = document.createElement('div');
                     authButton.innerHTML = `
-                        <div style="position: fixed; top: 10px; right: 10px; z-index: 1000;">
-                            <input type="text" id="token-input" placeholder="Enter JWT token" style="padding: 5px; margin-right: 5px;">
-                            <button onclick="setToken()" style="padding: 5px 10px;">Set Token</button>
-                            <button onclick="clearToken()" style="padding: 5px 10px;">Clear Token</button>
+                        <div style="position: fixed; top: 10px; right: 10px; z-index: 1000; display: flex; flex-direction: column; gap: 4px; align-items: flex-end;">
+                            <div>
+                                <input type="text" id="token-input" placeholder="Enter JWT token" style="padding: 5px; margin-right: 5px; min-width: 260px;">
+                                <button onclick="setToken()" style="padding: 5px 10px;">Set Token</button>
+                                <button onclick="clearToken()" style="padding: 5px 10px;">Clear Token</button>
+                            </div>
+                            <div>
+                                <input type="text" id="csrf-token-input" placeholder="Enter X-CSRF-Token" style="padding: 5px; margin-right: 5px; min-width: 260px;">
+                                <button onclick="setCsrfToken()" style="padding: 5px 10px;">Set CSRF</button>
+                                <button onclick="clearCsrfToken()" style="padding: 5px 10px;">Clear CSRF</button>
+                            </div>
                         </div>
                     `;
                     document.body.appendChild(authButton);
@@ -79,6 +93,22 @@
         function clearToken() {
             localStorage.removeItem('access_token');
             document.getElementById('token-input').value = '';
+            // Reload the page to clear the token
+            window.location.reload();
+        }
+
+        function setCsrfToken() {
+            const csrfToken = document.getElementById('csrf-token-input').value;
+            if (csrfToken) {
+                localStorage.setItem('csrf_token', csrfToken);
+                // Reload the page to apply the token
+                window.location.reload();
+            }
+        }
+
+        function clearCsrfToken() {
+            localStorage.removeItem('csrf_token');
+            document.getElementById('csrf-token-input').value = '';
             // Reload the page to clear the token
             window.location.reload();
         }
