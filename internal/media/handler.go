@@ -228,8 +228,11 @@ func ListMediaHandler(c *fiber.Ctx) error {
 
 	query := database.DB.Model(&models.MediaFile{})
 
+	// Filter by project_id: if present, filter by that project; if not, filter for global media (NULL)
 	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
 		query = query.Where("project_id = ?", pid)
+	} else {
+		query = query.Where("project_id IS NULL")
 	}
 
 	if mediaType != "" {
@@ -265,6 +268,28 @@ func GetMediaHandler(c *fiber.Ctx) error {
 	var mediaFile models.MediaFile
 	if err := database.DB.Preload("Uploader").First(&mediaFile, id).Error; err != nil {
 		return response.NotFound(c, "Media")
+	}
+
+	return response.Success(c, mediaFile, "Media retrieved successfully")
+}
+
+// GetMediaByParamHandler handles GET /projects/:id/media/:media_id
+func GetMediaByParamHandler(c *fiber.Ctx) error {
+	id, err := c.ParamsInt("media_id")
+	if err != nil {
+		return response.BadRequest(c, "Invalid media ID", nil)
+	}
+
+	var mediaFile models.MediaFile
+	if err := database.DB.Preload("Uploader").First(&mediaFile, id).Error; err != nil {
+		return response.NotFound(c, "Media")
+	}
+
+	// Verify media belongs to the project
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		if mediaFile.ProjectID == nil || *mediaFile.ProjectID != pid {
+			return response.NotFound(c, "Media")
+		}
 	}
 
 	return response.Success(c, mediaFile, "Media retrieved successfully")
@@ -330,6 +355,82 @@ func DeleteMediaHandler(c *fiber.Ctx) error {
 	return c.Status(204).JSON(fiber.Map{})
 }
 
+// UpdateMediaByParamHandler handles PUT /projects/:id/media/:media_id
+func UpdateMediaByParamHandler(c *fiber.Ctx) error {
+	id, err := c.ParamsInt("media_id")
+	if err != nil {
+		return response.BadRequest(c, "Invalid media ID", nil)
+	}
+
+	var mediaFile models.MediaFile
+	if err := database.DB.First(&mediaFile, id).Error; err != nil {
+		return response.NotFound(c, "Media")
+	}
+
+	// Verify media belongs to the project
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		if mediaFile.ProjectID == nil || *mediaFile.ProjectID != pid {
+			return response.NotFound(c, "Media")
+		}
+	}
+
+	var body struct {
+		Alt     string   `json:"alt"`
+		Caption string   `json:"caption"`
+		Folder  string   `json:"folder"`
+		Tags    []string `json:"tags"`
+	}
+
+	if err := c.BodyParser(&body); err != nil {
+		return response.BadRequest(c, "Invalid request body", err.Error())
+	}
+
+	mediaFile.Alt = body.Alt
+	mediaFile.Caption = sanitizeInput(body.Caption)
+	mediaFile.Folder = body.Folder
+
+	if len(body.Tags) > 0 {
+		tagsJSON, _ := json.Marshal(body.Tags)
+		mediaFile.Tags = tagsJSON
+	}
+
+	if err := database.DB.Save(&mediaFile).Error; err != nil {
+		return response.InternalError(c, "Failed to update media")
+	}
+
+	return response.Success(c, mediaFile, "Media updated successfully")
+}
+
+// DeleteMediaByParamHandler handles DELETE /projects/:id/media/:media_id
+func DeleteMediaByParamHandler(c *fiber.Ctx) error {
+	id, err := c.ParamsInt("media_id")
+	if err != nil {
+		return response.BadRequest(c, "Invalid media ID", nil)
+	}
+
+	var mediaFile models.MediaFile
+	if err := database.DB.First(&mediaFile, id).Error; err != nil {
+		return response.NotFound(c, "Media")
+	}
+
+	// Verify media belongs to the project
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		if mediaFile.ProjectID == nil || *mediaFile.ProjectID != pid {
+			return response.NotFound(c, "Media")
+		}
+	}
+
+	if err := utils.DeleteFile(mediaFile.URL); err != nil {
+		c.Append("X-Warning", "File deleted from database but may still exist in storage")
+	}
+
+	if err := database.DB.Delete(&mediaFile).Error; err != nil {
+		return response.InternalError(c, "Failed to delete media")
+	}
+
+	return c.Status(204).JSON(fiber.Map{})
+}
+
 func SearchMediaHandler(c *fiber.Ctx) error {
 	query := c.Query("q", "")
 	if query == "" {
@@ -346,8 +447,12 @@ func SearchMediaHandler(c *fiber.Ctx) error {
 	dbQuery := database.DB.Model(&models.MediaFile{}).
 		Where("file_name LIKE ? OR alt LIKE ? OR caption LIKE ?",
 			"%"+query+"%", "%"+query+"%", "%"+query+"%")
+
+	// Filter by project_id: if present, filter by that project; if not, filter for global media (NULL)
 	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
 		dbQuery = dbQuery.Where("project_id = ?", pid)
+	} else {
+		dbQuery = dbQuery.Where("project_id IS NULL")
 	}
 
 	dbQuery.Count(&total)
@@ -370,11 +475,24 @@ func GetMediaStatsHandler(c *fiber.Ctx) error {
 		StorageMode   string           `json:"storage_mode"`
 	}
 
-	database.DB.Model(&models.MediaFile{}).Count(&stats.TotalFiles)
+	// Build base query with project filter
+	baseQuery := database.DB.Model(&models.MediaFile{})
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		baseQuery = baseQuery.Where("project_id = ?", pid)
+	} else {
+		baseQuery = baseQuery.Where("project_id IS NULL")
+	}
 
-	database.DB.Model(&models.MediaFile{}).
-		Select("COALESCE(SUM(size), 0)").
-		Row().Scan(&stats.TotalSize)
+	baseQuery.Count(&stats.TotalFiles)
+
+	// Clone query for size calculation
+	sizeQuery := database.DB.Model(&models.MediaFile{})
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		sizeQuery = sizeQuery.Where("project_id = ?", pid)
+	} else {
+		sizeQuery = sizeQuery.Where("project_id IS NULL")
+	}
+	sizeQuery.Select("COALESCE(SUM(size), 0)").Row().Scan(&stats.TotalSize)
 
 	stats.ByType = make(map[string]int64)
 
@@ -385,14 +503,26 @@ func GetMediaStatsHandler(c *fiber.Ctx) error {
 
 	if dbName == "sqlite" {
 		var mediaFiles []models.MediaFile
-		database.DB.Model(&models.MediaFile{}).Select("type").Find(&mediaFiles)
+		typeQuery := database.DB.Model(&models.MediaFile{})
+		if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+			typeQuery = typeQuery.Where("project_id = ?", pid)
+		} else {
+			typeQuery = typeQuery.Where("project_id IS NULL")
+		}
+		typeQuery.Select("type").Find(&mediaFiles)
 
 		for _, media := range mediaFiles {
 			mediaType := strings.Split(media.Type, "/")[0]
 			stats.ByType[mediaType]++
 		}
 	} else {
-		rows, err = database.DB.Model(&models.MediaFile{}).
+		typeQuery := database.DB.Model(&models.MediaFile{})
+		if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+			typeQuery = typeQuery.Where("project_id = ?", pid)
+		} else {
+			typeQuery = typeQuery.Where("project_id IS NULL")
+		}
+		rows, err = typeQuery.
 			Select("split_part(type, '/', 1) as media_type, COUNT(*) as count").
 			Group("media_type").Rows()
 
@@ -407,9 +537,13 @@ func GetMediaStatsHandler(c *fiber.Ctx) error {
 		}
 	}
 
-	database.DB.Model(&models.MediaFile{}).
-		Where("created_at > ?", time.Now().Add(-24*time.Hour)).
-		Count(&stats.RecentUploads)
+	recentQuery := database.DB.Model(&models.MediaFile{})
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		recentQuery = recentQuery.Where("project_id = ?", pid)
+	} else {
+		recentQuery = recentQuery.Where("project_id IS NULL")
+	}
+	recentQuery.Where("created_at > ?", time.Now().Add(-24*time.Hour)).Count(&stats.RecentUploads)
 
 	stats.StorageMode = utils.GetStorageMode()
 
@@ -465,9 +599,14 @@ func CreateFolderHandler(c *fiber.Ctx) error {
 func ListFoldersHandler(c *fiber.Ctx) error {
 	var folders []models.MediaFolder
 	query := database.DB.Preload("Parent").Order("path")
+
+	// Filter by project_id: if present, filter by that project; if not, filter for global folders (NULL)
 	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
 		query = query.Where("project_id = ?", pid)
+	} else {
+		query = query.Where("project_id IS NULL")
 	}
+
 	if err := query.Find(&folders).Error; err != nil {
 		return response.InternalError(c, "Failed to fetch folders")
 	}

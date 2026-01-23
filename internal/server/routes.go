@@ -187,6 +187,55 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	projectGroup.Put("/:id/members/:member_id", project.UpdateProjectMemberRoleHandler)
 	projectGroup.Delete("/:id/members/:member_id", project.RemoveProjectMemberHandler)
 
+	// Project Media Routes
+	projectMediaGroup := projectGroup.Group("/:id/media", func(c *fiber.Ctx) error {
+		// Middleware to set project_id from URL param
+		projectID, err := c.ParamsInt("id")
+		if err != nil || projectID <= 0 {
+			return c.Status(400).JSON(fiber.Map{"error": "Invalid project ID"})
+		}
+		c.Locals("project_id", uint(projectID))
+		return c.Next()
+	})
+
+	// Project Media Folders
+	projectMediaGroup.Get("/folders",
+		middleware.PermissionProtected("Media", "read"),
+		media.ListFoldersHandler)
+	projectMediaGroup.Post("/folders",
+		middleware.PermissionProtected("Media", "create"),
+		media.CreateFolderHandler)
+
+	// Project Media Upload
+	projectMediaGroup.Post("/upload",
+		middleware.PermissionProtected("Media", "create"),
+		media.UploadMediaHandler)
+	projectMediaGroup.Post("/bulk-upload",
+		middleware.PermissionProtected("Media", "create"),
+		media.BulkUploadMediaHandler)
+
+	// Project Media List & Search
+	projectMediaGroup.Get("/",
+		middleware.PermissionProtected("Media", "read"),
+		media.ListMediaHandler)
+	projectMediaGroup.Get("/search",
+		middleware.PermissionProtected("Media", "read"),
+		media.SearchMediaHandler)
+	projectMediaGroup.Get("/stats",
+		middleware.PermissionProtected("Media", "read"),
+		media.GetMediaStatsHandler)
+
+	// Project Media Single Operations
+	projectMediaGroup.Get("/:media_id",
+		middleware.PermissionProtected("Media", "read"),
+		media.GetMediaByParamHandler)
+	projectMediaGroup.Put("/:media_id",
+		middleware.PermissionProtected("Media", "update"),
+		media.UpdateMediaByParamHandler)
+	projectMediaGroup.Delete("/:media_id",
+		middleware.PermissionProtected("Media", "delete"),
+		media.DeleteMediaByParamHandler)
+
 	// ==========================================
 	// CONTENT MANAGEMENT
 	// ==========================================

@@ -226,11 +226,11 @@ func CheckProjectPermissionByModuleAction(projectID, userID uint, module, action
 	}
 
 	// Fallback: Beri akses Skema Proyek untuk ProjectAdmin/ProjectOwner meskipun permission belum lengkap
-	if module == "ProjectSchema" {
+	if module == "ProjectSchema" || module == "ProjectMedia" || module == "ProjectContent" {
 		var role models.Role
 		if err := database.DB.First(&role, member.RoleID).Error; err == nil {
 			if role.Name == models.ProjectRoleAdmin || role.Name == models.ProjectRoleOwner {
-				log.Printf("DEBUG PERM: Fallback allow - %s can %s on ProjectSchema", role.Name, action)
+				log.Printf("DEBUG PERM: Fallback allow - %s can %s on %s", role.Name, action, module)
 				return true
 			}
 		}
@@ -537,10 +537,25 @@ func GetPermissionByRoleID(roleID uint, module, action string) (*models.Permissi
 }
 
 func detectProjectID(c *fiber.Ctx) uint {
+	// 0. Cek dari Locals (sudah diset oleh middleware sebelumnya)
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		log.Printf("AUTH DETECT: Found ProjectID %d from Locals (set by previous middleware).", pid)
+		return pid
+	}
+
 	// 1. Cek dari URL Parameters (Paling Prioritas)
 	if idParamInt, err := c.ParamsInt("project_id"); err == nil && idParamInt > 0 {
 		log.Printf("AUTH DETECT: Found ProjectID %d from URL Path Param 'project_id'.", idParamInt)
 		return uint(idParamInt)
+	}
+
+	// 1b. Cek dari URL param :id (untuk routes seperti /projects/:id/media)
+	// Hanya jika path mengandung "/projects/"
+	if strings.Contains(c.Path(), "/projects/") {
+		if idParamInt, err := c.ParamsInt("id"); err == nil && idParamInt > 0 {
+			log.Printf("AUTH DETECT: Found ProjectID %d from URL Path Param 'id' (project route).", idParamInt)
+			return uint(idParamInt)
+		}
 	}
 
 	// 2. Cek dari Query Parameters
