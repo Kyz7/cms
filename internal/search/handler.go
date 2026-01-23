@@ -19,6 +19,9 @@ func SearchEntriesHandler(c *fiber.Ctx) error {
 		FromDate: c.Query("from", ""),
 		ToDate:   c.Query("to", ""),
 	}
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		params.ProjectID = &pid
+	}
 
 	if params.Page < 1 {
 		params.Page = 1
@@ -127,6 +130,9 @@ func AdvancedSearchHandler(c *fiber.Ctx) error {
 		SortBy:         body.SortBy,
 		OrderBy:        body.OrderBy,
 	}
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		params.ProjectID = &pid
+	}
 	if params.Page < 1 {
 		params.Page = 1
 	}
@@ -162,6 +168,9 @@ func AdvancedSearchHandler(c *fiber.Ctx) error {
 func GetSearchFacetsHandler(c *fiber.Ctx) error {
 	params := SearchParams{
 		Query: c.Query("q", ""),
+	}
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		params.ProjectID = &pid
 	}
 
 	if ctIDs := c.Query("content_type_ids"); ctIDs != "" {
@@ -220,7 +229,13 @@ func SearchByRelationHandler(c *fiber.Ctx) error {
 		})
 	}
 
-	entries, err := SearchByRelation(uint(entryID), relationType)
+	var projectID *uint
+	// Assuming project_id is set in locals by middleware if accessing in project context
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		projectID = &pid
+	}
+
+	entries, err := SearchByRelation(uint(entryID), relationType, projectID)
 	if err != nil {
 		return response.InternalError(c, "Failed to search relations")
 	}
@@ -274,6 +289,9 @@ func BulkSearchHandler(c *fiber.Ctx) error {
 		Page:           1,
 		Limit:          body.Limit * len(body.ContentTypeIDs),
 	}
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		params.ProjectID = &pid
+	}
 
 	result, err := FullTextSearch(params)
 	if err != nil {
@@ -305,6 +323,9 @@ func ExportSearchResultsHandler(c *fiber.Ctx) error {
 		Limit:   1000,
 		SortBy:  c.Query("sort_by", "created_at"),
 		OrderBy: c.Query("order_by", "desc"),
+	}
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		params.ProjectID = &pid
 	}
 
 	result, err := FullTextSearch(params)

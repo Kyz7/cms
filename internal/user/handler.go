@@ -1,6 +1,7 @@
 package user
 
 import (
+	"fmt"
 	"regexp"
 
 	"github.com/Kyz7/cms/internal/database"
@@ -14,6 +15,33 @@ var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-
 
 func isValidEmail(email string) bool {
 	return emailRegex.MatchString(email) && len(email) <= 254
+}
+
+func validatePasswordStrength(password string) error {
+	if len(password) < 8 {
+		return fmt.Errorf("password must be at least 8 characters long")
+	}
+
+	hasUpper := false
+	hasLower := false
+	hasNumber := false
+
+	for _, char := range password {
+		switch {
+		case 'A' <= char && char <= 'Z':
+			hasUpper = true
+		case 'a' <= char && char <= 'z':
+			hasLower = true
+		case '0' <= char && char <= '9':
+			hasNumber = true
+		}
+	}
+
+	if !hasUpper || !hasLower || !hasNumber {
+		return fmt.Errorf("password must contain uppercase, lowercase, and numbers")
+	}
+
+	return nil
 }
 
 // CreateUserHandler menangani pembuatan pengguna baru dan memastikan Role yang diberikan adalah Role Global.
@@ -40,6 +68,12 @@ func CreateUserHandler(c *fiber.Ctx) error {
 	if !isValidEmail(body.Email) {
 		return response.ValidationError(c, map[string]string{
 			"email": "invalid email format",
+		})
+	}
+
+	if err := validatePasswordStrength(body.Password); err != nil {
+		return response.ValidationError(c, map[string]string{
+			"password": err.Error(),
 		})
 	}
 
@@ -127,9 +161,10 @@ func UpdateUserHandler(c *fiber.Ctx) error {
 	}
 
 	var body struct {
-		Name   string `json:"name"`
-		Email  string `json:"email"`
-		RoleID uint   `json:"role_id"` // Diasumsikan untuk Global Role
+		Name     string `json:"name"`
+		Email    string `json:"email"`
+		RoleID   uint   `json:"role_id"` // Diasumsikan untuk Global Role
+		Password string `json:"password"`
 	}
 
 	if err := c.BodyParser(&body); err != nil {
@@ -141,7 +176,7 @@ func UpdateUserHandler(c *fiber.Ctx) error {
 		return response.NotFound(c, "User")
 	}
 
-	if !isValidEmail(body.Email) {
+	if body.Email != "" && !isValidEmail(body.Email) {
 		return response.ValidationError(c, map[string]string{
 			"email": "invalid email format",
 		})
@@ -169,6 +204,19 @@ func UpdateUserHandler(c *fiber.Ctx) error {
 			return response.NotFound(c, "Global Role not found or is a Project Role")
 		}
 		user.RoleID = body.RoleID
+	}
+
+	if body.Password != "" {
+		if err := validatePasswordStrength(body.Password); err != nil {
+			return response.ValidationError(c, map[string]string{
+				"password": err.Error(),
+			})
+		}
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(body.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return response.InternalError(c, "Failed to hash password")
+		}
+		user.Password = string(hashedPassword)
 	}
 
 	// 4. Simpan Perubahan

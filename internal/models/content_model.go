@@ -68,6 +68,8 @@ type ContentRelation struct {
 	FromContentID uint           `json:"from_content_id"`
 	ToContentID   uint           `json:"to_content_id"`
 	RelationType  string         `gorm:"size:50" json:"relation_type"`
+	ProjectID     *uint          `gorm:"index" json:"project_id,omitempty"`
+	Project       *Project       `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
 	CreatedAt     time.Time      `json:"created_at"`
 	UpdatedAt     time.Time      `json:"updated_at"`
 	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`

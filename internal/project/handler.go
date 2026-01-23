@@ -1,11 +1,14 @@
 package project
 
 import (
+	"errors"
 	"strings"
 
+	"github.com/Kyz7/cms/internal/database"
 	"github.com/Kyz7/cms/internal/models"
 	"github.com/Kyz7/cms/internal/response"
 	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
 )
 
 type CreateProjectRequest struct {
@@ -19,7 +22,8 @@ type UpdateProjectRequest struct {
 }
 
 type AddMemberRequest struct {
-	UserID uint   `json:"user_id" validate:"required"`
+	UserID uint   `json:"user_id"`
+	Email  string `json:"email"`
 	Role   string `json:"role" validate:"required"`
 }
 
@@ -158,18 +162,31 @@ func AddProjectMemberHandler(c *fiber.Ctx) error {
 	}
 
 	// 5. Validasi Input Data Tambahan
-	if req.UserID == 0 || req.Role == "" {
-		return response.BadRequest(c, "UserID and Role are required", nil)
+	if (req.UserID == 0 && req.Email == "") || req.Role == "" {
+		return response.BadRequest(c, "UserID/Email and Role are required", nil)
+	}
+
+	targetUserID := req.UserID
+	if targetUserID == 0 {
+		// Lookup user by email
+		var user models.User
+		if err := database.DB.Where("email = ?", req.Email).First(&user).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return response.NotFound(c, "User with this email not found")
+			}
+			return response.InternalError(c, "Database error looking up user")
+		}
+		targetUserID = user.ID
 	}
 
 	// Pastikan user tidak mencoba menambahkan dirinya sendiri (walaupun logika AddProjectMember akan menghandle, ini pencegahan di layer handler)
-	if req.UserID == userID {
+	if targetUserID == userID {
 		return response.BadRequest(c, "Cannot add self as a member via this endpoint", nil)
 	}
 
 	// 6. Panggil Logika Bisnis
 	// userID di sini berfungsi sebagai 'invitedBy'
-	member, err := AddProjectMember(projectID, req.UserID, userID, req.Role)
+	member, err := AddProjectMember(projectID, targetUserID, userID, req.Role)
 	if err != nil {
 		// Menggunakan switch/case untuk membedakan error yang dapat ditampilkan ke user
 		switch {

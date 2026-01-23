@@ -37,8 +37,9 @@ type ProjectMember struct {
 
 // ProjectMemberRole constants
 const (
-	ProjectRoleOwner  = "ProjectOwner"
-	ProjectRoleAdmin  = "ProjectAdmin"
-	ProjectRoleEditor = "ProjectEditor"
-	ProjectRoleViewer = "ProjectViewer"
+	ProjectRoleOwner         = "ProjectOwner"
+	ProjectRoleAdmin         = "ProjectAdmin"
+	ProjectRoleEditor        = "ProjectEditor"
+	ProjectRoleViewer        = "ProjectViewer"
+	ProjectRoleContentWriter = "ProjectContentWriter"
 )

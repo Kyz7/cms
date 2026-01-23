@@ -8,6 +8,7 @@ import (
 	"github.com/Kyz7/cms/internal/database"
 	"github.com/Kyz7/cms/internal/models"
 	"github.com/Kyz7/cms/internal/project"
+	"gorm.io/gorm"
 )
 
 func ChangeWorkflowStatus(entryID, userID uint, toStatus string, comment string) (*models.ContentEntry, error) {
@@ -92,7 +93,7 @@ func mapProjectRoleToWorkflowRole(projectRole string) string {
 func isValidTransition(fromStatus, toStatus models.WorkflowStatus, userRole string) bool {
 	transitions := map[models.WorkflowStatus]map[models.WorkflowStatus][]string{
 		models.StatusDraft: {
-			models.StatusInReview: {"editor", "admin"},
+			models.StatusInReview: {"content_writer", "editor", "admin"},
 		},
 		models.StatusInReview: {
 			models.StatusReadyForApproval: {"editor", "admin"},
@@ -167,7 +168,35 @@ func GetWorkflowComments(entryID uint, includePrivate bool) ([]models.WorkflowCo
 	return comments, err
 }
 
-func AssignEntry(entryID, assignedTo, assignedBy uint, dueDate *time.Time) (*models.WorkflowAssignment, error) {
+func AssignEntry(entryID, assignedTo, assignedBy uint, dueDate *time.Time, autoTransitionToDraft bool) (*models.WorkflowAssignment, error) {
+	// 1. Check entry status
+	var entry models.ContentEntry
+	if err := database.DB.First(&entry, entryID).Error; err != nil {
+		return nil, fmt.Errorf("entry not found")
+	}
+
+	if entry.Status != models.StatusDraft && entry.Status != models.StatusRejected {
+		return nil, fmt.Errorf("assignment can only be created when entry is in Draft or Rejected status (current: %s)", entry.Status)
+	}
+
+	// 1b. Prevent duplicate pending assignment for the same entry
+	{
+		var existing models.WorkflowAssignment
+		if err := database.DB.Where("entry_id = ? AND status = ?", entryID, "pending").First(&existing).Error; err == nil {
+			return nil, fmt.Errorf("an active assignment already exists for this entry")
+		}
+	}
+
+	// 2. Check assignee role
+	var assignee models.User
+	if err := database.DB.Preload("Role").First(&assignee, assignedTo).Error; err != nil {
+		return nil, fmt.Errorf("assignee user not found")
+	}
+
+	if assignee.Role == nil || assignee.Role.Name != "content_writer" {
+		return nil, fmt.Errorf("assignment can only be directed to users with 'content_writer' role")
+	}
+
 	assignment := models.WorkflowAssignment{
 		EntryID:    entryID,
 		AssignedTo: assignedTo,
@@ -178,6 +207,28 @@ func AssignEntry(entryID, assignedTo, assignedBy uint, dueDate *time.Time) (*mod
 
 	if err := database.DB.Create(&assignment).Error; err != nil {
 		return nil, err
+	}
+
+	// Auto-transition Rejected -> Draft upon assignment
+	if autoTransitionToDraft && entry.Status == models.StatusRejected {
+		_, err := ChangeWorkflowStatus(entryID, assignedBy, string(models.StatusDraft), "Auto-transition to Draft upon assignment")
+		if err != nil {
+			// Fallback: update entry status directly if ChangeWorkflowStatus fails
+			entry.Status = models.StatusDraft
+			if err := database.DB.Save(&entry).Error; err != nil {
+				return nil, fmt.Errorf("failed to update entry status: %v", err)
+			}
+
+			// Create workflow history entry
+			history := models.WorkflowHistory{
+				EntryID:    entryID,
+				FromStatus: models.StatusRejected,
+				ToStatus:   models.StatusDraft,
+				ChangedBy:  assignedBy,
+				Comment:    "Auto-transition to Draft upon assignment",
+			}
+			database.DB.Create(&history)
+		}
 	}
 
 	database.DB.Preload("User").Preload("Assigner").First(&assignment, assignment.ID)
@@ -201,18 +252,18 @@ func GetMyAssignments(userID uint, status string) ([]models.WorkflowAssignment, 
 	return assignments, err
 }
 
-func CompleteAssignment(assignmentID uint) error {
-	return database.DB.Model(&models.WorkflowAssignment{}).
-		Where("id = ?", assignmentID).
-		Update("status", "completed").Error
-}
-
-func GetEntriesByStatus(contentTypeID uint, status string) ([]models.ContentEntry, error) {
+func GetEntriesByStatus(contentTypeID uint, status string, projectID *uint) ([]models.ContentEntry, error) {
 	var entries []models.ContentEntry
 	query := database.DB.Where("content_type_id = ?", contentTypeID)
 
 	if status != "" {
 		query = query.Where("status = ?", status)
+	}
+
+	if projectID != nil && *projectID > 0 {
+		query = query.Where("project_id = ?", *projectID)
+	} else {
+		query = query.Where("project_id IS NULL")
 	}
 
 	err := query.Order("created_at DESC").Find(&entries).Error
@@ -287,4 +338,84 @@ func GetWorkflowStatistics(contentTypeID uint) (map[string]interface{}, error) {
 	stats["rejected"] = rejected
 
 	return stats, nil
+}
+
+func GetActiveAssignment(entryID uint) (*models.WorkflowAssignment, error) {
+	var assignment models.WorkflowAssignment
+	err := database.DB.
+		Where("entry_id = ? AND status = ?", entryID, "pending").
+		Preload("User").
+		Preload("Assigner").
+		First(&assignment).Error
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("no active assignment found")
+		}
+		return nil, err
+	}
+
+	return &assignment, nil
+}
+
+func GetContentWriterUsers() ([]models.User, error) {
+	var users []models.User
+	err := database.DB.
+		Joins("JOIN roles ON users.role_id = roles.id").
+		Where("roles.name = ?", "content_writer").
+		Preload("Role").
+		Find(&users).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return users, nil
+}
+
+// GetAssigneeUsers returns users eligible to be assignees (content_writer).
+// Matches old backend behavior: only content_writer role users are returned.
+func GetAssigneeUsers(projectID *uint) ([]models.User, error) {
+	var users []models.User
+	query := database.DB.
+		Joins("JOIN roles ON users.role_id = roles.id").
+		Where("roles.name = ?", "content_writer").
+		Preload("Role")
+
+	// Future: if projectID != nil, we could filter users who are members of that project.
+	// For now, we return global list of eligible roles.
+
+	if err := query.Find(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+func CompleteAssignment(assignmentID, userID uint, requestReview bool) error {
+	var assignment models.WorkflowAssignment
+	if err := database.DB.Preload("Entry").First(&assignment, assignmentID).Error; err != nil {
+		return fmt.Errorf("assignment not found")
+	}
+
+	if assignment.AssignedTo != userID {
+		return fmt.Errorf("only the assigned user can complete this assignment")
+	}
+
+	if assignment.Status == "completed" {
+		return fmt.Errorf("assignment is already completed")
+	}
+
+	assignment.Status = "completed"
+	if err := database.DB.Save(&assignment).Error; err != nil {
+		return fmt.Errorf("failed to complete assignment: %v", err)
+	}
+
+	if requestReview && assignment.Entry != nil && assignment.Entry.Status == models.StatusDraft {
+		_, err := RequestReview(assignment.EntryID, userID, "Auto-requested review upon assignment completion")
+		if err != nil {
+			return fmt.Errorf("assignment completed but failed to request review: %v", err)
+		}
+	}
+
+	return nil
 }

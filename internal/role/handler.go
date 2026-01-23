@@ -114,12 +114,36 @@ func CreateRoleHandler(c *fiber.Ctx) error {
 // ListRolesHandler mengambil daftar semua Role.
 func ListRolesHandler(c *fiber.Ctx) error {
 	var roles []models.Role
-	// Query tidak berubah, mengambil semua Role (Global dan Proyek)
-	if err := database.DB.Preload("Permissions").Find(&roles).Error; err != nil {
+	query := database.DB.Preload("Permissions")
+
+	// Optional filter: is_global=true/false atau scope=global|project
+	if v := c.Query("is_global"); v != "" {
+		if v == "true" {
+			query = query.Where("is_global = ?", true)
+		} else if v == "false" {
+			query = query.Where("is_global = ?", false)
+		}
+	} else if scope := c.Query("scope"); scope != "" {
+		if scope == "global" {
+			query = query.Where("is_global = ?", true)
+		} else if scope == "project" {
+			query = query.Where("is_global = ?", false)
+		}
+	}
+
+	if err := query.Find(&roles).Error; err != nil {
 		return response.InternalError(c, "Failed to fetch roles")
 	}
 
 	return response.Success(c, roles, "Roles retrieved successfully")
+}
+
+// NormalizeRoleScopesHandler: admin endpoint untuk memperbaiki flag is_global di database lama
+func NormalizeRoleScopesHandler(c *fiber.Ctx) error {
+	if err := NormalizeRoleScopes(database.DB); err != nil {
+		return response.InternalError(c, "Failed to normalize role scopes")
+	}
+	return response.Success(c, fiber.Map{"normalized": true}, "Role scopes normalized")
 }
 
 // GetRoleHandler mengambil Role berdasarkan ID.

@@ -94,12 +94,26 @@ func (r *Resolvers) UsersResolver(p graphql.ResolveParams) (interface{}, error) 
 		return nil, err
 	}
 
-	if !r.checkPermission(userID, "User", "read") {
+	// Pastikan user terautentikasi
+	if userID == 0 {
 		return nil, fmt.Errorf("permission denied")
+	}
+
+	// Ambil role user yang meminta
+	var requester models.User
+	if err := r.DB.Preload("Role").First(&requester, userID).Error; err != nil {
+		return nil, err
 	}
 
 	var users []models.User
 	query := r.DB.Preload("Role")
+
+	// Admin melihat semua user; non-admin dibatasi hanya viewer & content_writer
+	isAdmin := requester.Role != nil && requester.Role.Name == "admin"
+	if !isAdmin {
+		query = query.Joins("JOIN roles ON users.role_id = roles.id").
+			Where("roles.name IN ?", []string{"content_writer", "viewer"})
+	}
 
 	if limit, ok := p.Args["limit"].(int); ok {
 		query = query.Limit(limit)
@@ -110,6 +124,24 @@ func (r *Resolvers) UsersResolver(p graphql.ResolveParams) (interface{}, error) 
 
 	if err := query.Find(&users).Error; err != nil {
 		return nil, err
+	}
+
+	// Fallback: jika tidak ada user dengan role viewer/content_writer,
+	// tampilkan semua user non-admin agar tidak kosong di UI
+	if !isAdmin && len(users) == 0 {
+		query2 := r.DB.
+			Joins("JOIN roles ON users.role_id = roles.id").
+			Where("roles.name <> ?", "admin").
+			Preload("Role")
+		if limit, ok := p.Args["limit"].(int); ok {
+			query2 = query2.Limit(limit)
+		}
+		if offset, ok := p.Args["offset"].(int); ok {
+			query2 = query2.Offset(offset)
+		}
+		if err := query2.Find(&users).Error; err != nil {
+			return nil, err
+		}
 	}
 
 	result := make([]map[string]interface{}, len(users))
@@ -1510,7 +1542,7 @@ func (r *Resolvers) AssignEntryResolver(p graphql.ResolveParams) (interface{}, e
 	if err != nil {
 		return nil, err
 	}
-	if !r.checkPermission(userID, "ContentEntry", "approve") {
+	if !r.checkPermission(userID, "ContentEntry", "update") {
 		return nil, fmt.Errorf("permission denied")
 	}
 	entryId := uint(p.Args["entryId"].(int))
@@ -1521,7 +1553,7 @@ func (r *Resolvers) AssignEntryResolver(p graphql.ResolveParams) (interface{}, e
 			dueDatePtr = &t
 		}
 	}
-	wa, err := workflow.AssignEntry(entryId, assignedTo, userID, dueDatePtr)
+	wa, err := workflow.AssignEntry(entryId, assignedTo, userID, dueDatePtr, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1902,18 +1934,52 @@ func (r *Resolvers) AddProjectMemberResolver(p graphql.ResolveParams) (interface
 	}
 	projectID := uint(projectID64)
 
-	userIDStr := p.Args["userId"].(string)
-	userID64, err := strconv.ParseUint(userIDStr, 10, 32)
-	if err != nil {
-		return nil, fmt.Errorf("invalid user ID: %w", err)
+	// Authorization: only project admins/owners can invite
+	if !project.HasProjectPermission(projectID, userID, models.ProjectRoleAdmin) {
+		return nil, fmt.Errorf("permission denied: only project admins/owners can invite members")
 	}
-	memberUserID := uint(userID64)
+
+	// Resolve target user: by userId OR userEmail OR userName
+	var memberUserID uint
+	if v, ok := p.Args["userId"].(string); ok && v != "" {
+		userID64, err := strconv.ParseUint(v, 10, 32)
+		if err != nil {
+			return nil, fmt.Errorf("invalid user ID: %w", err)
+		}
+		memberUserID = uint(userID64)
+	} else if email, ok := p.Args["userEmail"].(string); ok && email != "" {
+		var u models.User
+		if err := r.DB.Where("email = ?", email).First(&u).Error; err != nil {
+			return nil, fmt.Errorf("user with email not found")
+		}
+		memberUserID = u.ID
+	} else if name, ok := p.Args["userName"].(string); ok && name != "" {
+		var u models.User
+		if err := r.DB.Where("name = ?", name).First(&u).Error; err != nil {
+			return nil, fmt.Errorf("user with name not found")
+		}
+		memberUserID = u.ID
+	} else {
+		return nil, fmt.Errorf("one of userId, userEmail, or userName is required")
+	}
 
 	role := p.Args["role"].(string)
 
 	member, err := project.AddProjectMember(projectID, memberUserID, userID, role)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add project member: %w", err)
+	}
+
+	// Optional: assign a Global Role (e.g., content_writer)
+	if gr, ok := p.Args["globalRole"].(string); ok && gr != "" {
+		var globalRole models.Role
+		if err := r.DB.Where("name = ? AND is_global = ?", gr, true).First(&globalRole).Error; err == nil {
+			var target models.User
+			if err := r.DB.First(&target, memberUserID).Error; err == nil {
+				target.RoleID = globalRole.ID
+				_ = r.DB.Save(&target).Error
+			}
+		}
 	}
 
 	// Member already has Role preloaded from AddProjectMember

@@ -54,7 +54,11 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 		Expiration:     1 * time.Hour,
 		Next: func(c *fiber.Ctx) bool {
 			path := c.Path()
-			if path == "/health" || path == "/csrf-token" || strings.HasPrefix(path, "/swagger") || path == "/openapi.yaml" {
+			if path == "/health" || strings.HasPrefix(path, "/swagger") || path == "/openapi.yaml" {
+				return true
+			}
+			// Skip CSRF when using JWT Authorization for API calls
+			if authHeader := c.Get("Authorization"); authHeader != "" {
 				return true
 			}
 			// Skip CSRF for auth endpoints (except logout which requires JWT)
@@ -135,6 +139,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 		Max:        3,
 		Expiration: 5 * time.Minute,
 	}), auth.RefreshHandler)
+	authGroup.Get("/me", auth.JWTProtected(), auth.MeHandler)
 	authGroup.Post("/logout", auth.JWTProtected(), auth.LogoutHandler)
 	// ==========================================
 	// USER MANAGEMENT (Admin only)
@@ -161,6 +166,7 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	roleGroup.Delete("/:id", role.DeleteRoleHandler)
 	roleGroup.Post("/:id/duplicate", role.DuplicateRoleHandler)
 	roleGroup.Post("/assign", role.AssignRoleToUserHandler)
+	roleGroup.Post("/normalize", role.NormalizeRoleScopesHandler)
 
 	// ==========================================
 	// PROJECT MANAGEMENT
@@ -184,12 +190,15 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	// ==========================================
 	// CONTENT MANAGEMENT
 	// ==========================================
+	// Public preview endpoint (no JWT, only requires preview token)
+	app.Get("/content/entries/:entry_id/preview", content.PreviewEntryHandler)
+
 	contentGroup := app.Group("/content")
 	contentGroup.Use(auth.JWTProtected())
 
 	// Content Types
 	contentGroup.Post("/types",
-		middleware.PermissionProtected("ContentEntry", "create"),
+		middleware.PermissionProtected("ContentType", "create"),
 		content.CreateContentTypeHandler)
 	contentGroup.Get("/types",
 		middleware.PermissionProtected("ContentEntry", "read"),
@@ -198,22 +207,22 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 		middleware.PermissionProtected("ContentEntry", "read"),
 		content.GetContentTypeHandler)
 	contentGroup.Put("/types/:id",
-		middleware.PermissionProtected("ContentEntry", "update"),
+		middleware.PermissionProtected("ContentType", "update"),
 		content.UpdateContentTypeHandler)
 	contentGroup.Delete("/types/:id",
-		middleware.PermissionProtected("ContentEntry", "delete"),
+		middleware.PermissionProtected("ContentType", "delete"),
 		content.DeleteContentTypeHandler)
 
 	// Content Fields
 	contentGroup.Post("/types/:content_type_id/fields",
-		middleware.PermissionProtected("ContentEntry", "update"),
+		middleware.PermissionProtected("ContentType", "update"),
 		content.AddFieldHandler)
 	// Rute Baru (Lebih Kontekstual)
 	contentGroup.Put("/:content_type_id/fields/:field_id",
-		middleware.PermissionProtected("ContentEntry", "update"),
+		middleware.PermissionProtected("ContentType", "update"),
 		content.UpdateFieldHandler)
 	contentGroup.Delete("/:content_type_id/fields/:field_id",
-		middleware.PermissionProtected("ContentEntry", "delete"),
+		middleware.PermissionProtected("ContentType", "delete"),
 		content.DeleteFieldHandler)
 
 	// Content Entries - List by Content Type
@@ -252,8 +261,6 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	contentGroup.Post("/entries/:entry_id/preview-token",
 		middleware.PermissionProtected("ContentEntry", "read"),
 		content.GeneratePreviewTokenHandler)
-	contentGroup.Get("/entries/:entry_id/preview",
-		content.PreviewEntryHandler)
 
 	// Relations
 	contentGroup.Post("/:from_content_id/relations",
@@ -359,8 +366,14 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 
 	// Assignment
 	workflowGroup.Post("/entries/:entry_id/assign",
-		middleware.PermissionProtected("ContentEntry", "approve"),
+		middleware.PermissionProtected("ContentEntry", "update"), // Menggunakan update permission agar editor bisa assign
 		workflow.AssignEntryHandler)
+	workflowGroup.Get("/entries/:entry_id/active-assignment",
+		middleware.PermissionProtected("ContentEntry", "read"),
+		workflow.GetActiveAssignmentHandler)
+	workflowGroup.Get("/assignees",
+		middleware.PermissionProtected("ContentEntry", "read"),
+		workflow.GetAssigneesHandler)
 	workflowGroup.Get("/assignments",
 		middleware.PermissionProtected("ContentEntry", "read"),
 		workflow.GetMyAssignmentsHandler)

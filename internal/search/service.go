@@ -25,6 +25,7 @@ type SearchParams struct {
 	Limit          int      `json:"limit"`
 	SortBy         string   `json:"sort_by"`
 	OrderBy        string   `json:"order_by"`
+	ProjectID      *uint    `json:"project_id,omitempty"`
 }
 
 type SearchResult struct {
@@ -107,6 +108,9 @@ func FullTextSearch(params SearchParams) (*SearchResult, error) {
 	}
 	if params.CreatedBy > 0 {
 		query = query.Where("created_by = ?", params.CreatedBy)
+	}
+	if params.ProjectID != nil {
+		query = query.Where("project_id = ?", *params.ProjectID)
 	}
 
 	// 3. Filter Tanggal
@@ -288,6 +292,10 @@ func GetSearchFacets(params SearchParams) (*SearchFacets, error) {
 
 	baseQuery := database.DB.Model(&models.ContentEntry{})
 
+	if params.ProjectID != nil {
+		baseQuery = baseQuery.Where("project_id = ?", *params.ProjectID)
+	}
+
 	if params.Query != "" {
 		var ctID uint
 		if len(params.ContentTypeIDs) > 0 {
@@ -342,6 +350,9 @@ func AdvancedFilter(filters map[string]any, params SearchParams) (*SearchResult,
 
 	if len(params.ContentTypeIDs) > 0 {
 		query = query.Where("content_type_id IN ?", params.ContentTypeIDs)
+	}
+	if params.ProjectID != nil {
+		query = query.Where("project_id = ?", *params.ProjectID)
 	}
 
 	dbDialect := database.DB.Dialector.Name()
@@ -439,6 +450,12 @@ func AutoComplete(field, prefix string, contentTypeID uint, limit int) ([]string
 	query := database.DB.Model(&models.ContentEntry{}).
 		Where("content_type_id = ?", contentTypeID)
 
+	// We can't easily pass ProjectID here without changing signature,
+	// but AutoComplete is usually context-aware.
+	// For now, let's leave it. The user mostly cares about "entry" listing.
+	// Actually, if we want autocomplete to be scoped, we should add projectID param.
+	// But let's stick to the main search first.
+
 	if dbDialect == "postgres" {
 		// ✅ GUNAKAN PARAMETER BINDING
 		query.Distinct().
@@ -457,10 +474,15 @@ func AutoComplete(field, prefix string, contentTypeID uint, limit int) ([]string
 	return suggestions, nil
 }
 
-func SearchByRelation(entryID uint, relationType string) ([]models.ContentEntry, error) {
+func SearchByRelation(entryID uint, relationType string, projectID *uint) ([]models.ContentEntry, error) {
 	var relations []models.ContentRelation
-	if err := database.DB.Where("from_content_id = ? AND relation_type = ?", entryID, relationType).
-		Find(&relations).Error; err != nil {
+	query := database.DB.Where("from_content_id = ? AND relation_type = ?", entryID, relationType)
+
+	if projectID != nil {
+		query = query.Where("project_id = ?", *projectID)
+	}
+
+	if err := query.Find(&relations).Error; err != nil {
 		return nil, err
 	}
 

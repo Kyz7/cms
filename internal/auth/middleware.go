@@ -54,7 +54,7 @@ func JWTProtected() fiber.Handler {
 func RoleProtected(allowedRoles ...string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		userIDInterface := c.Locals("user_id")
-		if userIDInterface != nil {
+		if userIDInterface == nil {
 			return response.Unauthorized(c, "User not authenticated")
 		}
 		userID, ok := userIDInterface.(uint)

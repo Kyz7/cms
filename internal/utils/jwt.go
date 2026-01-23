@@ -79,11 +79,16 @@ func ParseJWT(tokenStr string) (uint, error) {
 
 func GetDefaultViewerRoleID() (uint, error) {
 	var role models.Role
-	if err := database.DB.Where("name = ?", "viewer").First(&role).Error; err != nil {
+	// Case-insensitive lookup for 'viewer'
+	if err := database.DB.Where("LOWER(name) = LOWER(?)", "viewer").First(&role).Error; err != nil {
 		return 0, err
 	}
 	if role.ID == 0 {
 		return 0, fmt.Errorf("viewer role found but ID is 0")
+	}
+	// Ensure viewer is marked as global
+	if !role.IsGlobal {
+		database.DB.Model(&models.Role{}).Where("id = ?", role.ID).Update("is_global", true)
 	}
 	return role.ID, nil
 }

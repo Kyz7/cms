@@ -16,10 +16,10 @@ type NewRoleMember struct {
 }
 
 func CreateProject(name, description string, createdBy uint) (*models.Project, error) {
-	ownerID, ok := globals.GetRoleIDByName(models.ProjectRoleOwner)
+	// User requested that creator automatically becomes Project Admin
+	adminID, ok := globals.GetRoleIDByName(models.ProjectRoleAdmin)
 	if !ok {
-
-		return nil, response.InternalError(nil, "Project owner role not configured")
+		return nil, response.InternalError(nil, "Project admin role not configured")
 	}
 
 	project := models.Project{
@@ -36,13 +36,13 @@ func CreateProject(name, description string, createdBy uint) (*models.Project, e
 		member := models.ProjectMember{
 			ProjectID: project.ID,
 			UserID:    createdBy,
-			RoleID:    ownerID,
+			RoleID:    adminID,
 			Status:    "active",
 			InvitedBy: createdBy,
 		}
 
 		if err := tx.Create(&member).Error; err != nil {
-			return fmt.Errorf("failed to add creator as project owner: %w", err)
+			return fmt.Errorf("failed to add creator as project admin: %w", err)
 		}
 
 		return nil
@@ -62,6 +62,7 @@ func GetProject(projectID uint) (*models.Project, error) {
 	if err := database.DB.
 		Preload("Creator").
 		Preload("Members.User").
+		Preload("Members.Role").
 		Preload("ContentTypes").
 		First(&project, projectID).Error; err != nil {
 		return nil, fmt.Errorf("project not found")
@@ -78,6 +79,7 @@ func ListProjects(userID uint) ([]models.Project, error) {
 		Where("project_members.user_id = ? AND project_members.deleted_at IS NULL", userID).
 		Preload("Creator").
 		Preload("Members.User").
+		Preload("Members.Role").
 		Group("projects.id").
 		Find(&projects).Error
 

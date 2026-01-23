@@ -16,6 +16,8 @@ type MediaFile struct {
 	Width      *int           `json:"width,omitempty"`
 	Height     *int           `json:"height,omitempty"`
 	Folder     string         `gorm:"size:255;index" json:"folder"`
+	ProjectID  *uint          `gorm:"index" json:"project_id,omitempty"`
+	Project    *Project       `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
 	Tags       datatypes.JSON `json:"tags,omitempty"`
 	Alt        string         `gorm:"size:255" json:"alt"`
 	Caption    string         `gorm:"type:text" json:"caption"`
@@ -32,6 +34,8 @@ type MediaFolder struct {
 	Path      string         `gorm:"size:255;uniqueIndex" json:"path"`
 	ParentID  *uint          `json:"parent_id,omitempty"`
 	Parent    *MediaFolder   `gorm:"foreignKey:ParentID" json:"parent,omitempty"`
+	ProjectID *uint          `gorm:"index" json:"project_id,omitempty"`
+	Project   *Project       `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
 	CreatedBy uint           `json:"created_by"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`

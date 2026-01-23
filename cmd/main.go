@@ -95,6 +95,29 @@ func main() {
 	} else {
 		log.Println("✅ Default roles seeded")
 	}
+	// Normalize legacy databases: ensure is_global flags are correct
+	if err := role.NormalizeRoleScopes(database.DB); err != nil {
+		log.Println("⚠️  Failed to normalize role scopes:", err)
+	} else {
+		log.Println("✅ Role scopes normalized (is_global flags updated)")
+	}
+	// Ensure global roles have schema permissions for Content Builder & Fields
+	if err := role.EnsureGlobalSchemaPermissions(database.DB); err != nil {
+		log.Println("⚠️  Failed to ensure global schema permissions:", err)
+	} else {
+		log.Println("✅ Global schema permissions ensured for editor/content_writer")
+	}
+	// Ensure editor can create/update entries across all content types
+	if err := role.EnsureEditorContentEntryUnrestricted(database.DB); err != nil {
+		log.Println("⚠️  Failed to ensure editor entry permissions:", err)
+	} else {
+		log.Println("✅ Editor entry permissions normalized (unrestricted ContentTypeIDs, FieldScope=all)")
+	}
+	if err := role.EnsureProjectSchemaPermissions(database.DB); err != nil {
+		log.Println("⚠️  Failed to ensure project schema permissions:", err)
+	} else {
+		log.Println("✅ Project schema permissions ensured for project roles")
+	}
 
 	if err := role.SeedWorkflowTransitions(database.DB); err != nil {
 		log.Println("⚠️  Failed to seed workflow transitions:", err)

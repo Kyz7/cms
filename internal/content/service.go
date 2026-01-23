@@ -51,11 +51,31 @@ func AddFieldToContentType(contentTypeID uint, name, fieldType string, required 
 	return &field, nil
 }
 
-func CreateContentRelation(fromID, toID uint, relationType string) (*models.ContentRelation, error) {
+func CreateContentRelation(fromID, toID uint, relationType string, projectID *uint) (*models.ContentRelation, error) {
+	// Validate that both entries belong to the same project (if projectID is set)
+	if projectID != nil {
+		var fromEntry, toEntry models.ContentEntry
+		if err := database.DB.First(&fromEntry, fromID).Error; err != nil {
+			return nil, fmt.Errorf("source entry not found")
+		}
+		if err := database.DB.First(&toEntry, toID).Error; err != nil {
+			return nil, fmt.Errorf("target entry not found")
+		}
+
+		// Allow linking to global entries (ProjectID is nil) or same project entries
+		if fromEntry.ProjectID != nil && *fromEntry.ProjectID != *projectID {
+			return nil, fmt.Errorf("source entry does not belong to the current project")
+		}
+		if toEntry.ProjectID != nil && *toEntry.ProjectID != *projectID {
+			return nil, fmt.Errorf("target entry does not belong to the current project")
+		}
+	}
+
 	relation := models.ContentRelation{
 		FromContentID: fromID,
 		ToContentID:   toID,
 		RelationType:  relationType,
+		ProjectID:     projectID,
 	}
 	if err := database.DB.Create(&relation).Error; err != nil {
 		return nil, err
@@ -63,9 +83,15 @@ func CreateContentRelation(fromID, toID uint, relationType string) (*models.Cont
 	return &relation, nil
 }
 
-func ListContentRelations(fromID uint) ([]models.ContentRelation, error) {
+func ListContentRelations(fromID uint, projectID *uint) ([]models.ContentRelation, error) {
 	var relations []models.ContentRelation
-	if err := database.DB.Where("from_content_id = ?", fromID).Find(&relations).Error; err != nil {
+	query := database.DB.Where("from_content_id = ?", fromID)
+
+	if projectID != nil {
+		query = query.Where("project_id = ?", *projectID)
+	}
+
+	if err := query.Find(&relations).Error; err != nil {
 		return nil, err
 	}
 	return relations, nil

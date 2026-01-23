@@ -391,6 +391,47 @@ func (r *Resolvers) CreateSchema() (graphql.Schema, error) {
 				},
 				Resolve: r.AssignRoleToUserResolver,
 			},
+			"createProject": &graphql.Field{
+				Type: getProjectType(),
+				Args: graphql.FieldConfigArgument{
+					"name": &graphql.ArgumentConfig{
+						Type: graphql.NewNonNull(graphql.String),
+					},
+					"description": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+				},
+				Resolve: r.CreateProjectResolver,
+			},
+			"addProjectMember": &graphql.Field{
+				Type: getProjectMemberType(),
+				Args: graphql.FieldConfigArgument{
+					"projectId":  &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.ID)},
+					"userId":     &graphql.ArgumentConfig{Type: graphql.ID},
+					"userEmail":  &graphql.ArgumentConfig{Type: graphql.String},
+					"userName":   &graphql.ArgumentConfig{Type: graphql.String},
+					"role":       &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+					"globalRole": &graphql.ArgumentConfig{Type: graphql.String},
+				},
+				Resolve: r.AddProjectMemberResolver,
+			},
+			"updateProjectMemberRole": &graphql.Field{
+				Type: getProjectMemberType(),
+				Args: graphql.FieldConfigArgument{
+					"projectId": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.ID)},
+					"memberId":  &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.ID)},
+					"role":      &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
+				},
+				Resolve: r.UpdateProjectMemberRoleResolver,
+			},
+			"removeProjectMember": &graphql.Field{
+				Type: graphql.Boolean,
+				Args: graphql.FieldConfigArgument{
+					"projectId": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.ID)},
+					"memberId":  &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.ID)},
+				},
+				Resolve: r.RemoveProjectMemberResolver,
+			},
 			"createContentType": &graphql.Field{
 				Type: ContentTypeType,
 				Args: graphql.FieldConfigArgument{

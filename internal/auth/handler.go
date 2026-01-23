@@ -334,6 +334,25 @@ func ResetPasswordHandler(c *fiber.Ctx) error {
 	return response.Success(c, nil, "Password reset successful")
 }
 
+// MeHandler returns the currently authenticated user using JWT token
+func MeHandler(c *fiber.Ctx) error {
+	userIDInterface := c.Locals("user_id")
+	if userIDInterface == nil {
+		return response.Unauthorized(c, "User not authenticated")
+	}
+
+	userID, ok := userIDInterface.(uint)
+	if !ok {
+		return response.InternalError(c, "Invalid user ID format")
+	}
+
+	var u models.User
+	if err := database.DB.Preload("Role.Permissions").First(&u, userID).Error; err != nil {
+		return response.NotFound(c, "User")
+	}
+	u.Password = ""
+	return response.Success(c, u, "Current user retrieved")
+}
 func generateSecureToken(n int) (string, string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {

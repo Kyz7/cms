@@ -28,6 +28,10 @@ func sanitizeInput(input string) string {
 
 func UploadMediaHandler(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uint)
+	var projectID *uint
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		projectID = &pid
+	}
 
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -58,6 +62,26 @@ func UploadMediaHandler(c *fiber.Ctx) error {
 		return response.InternalError(c, "Failed to upload file: "+err.Error())
 	}
 
+	if projectID != nil {
+		var project models.Project
+		if err := database.DB.First(&project, *projectID).Error; err == nil {
+			orgFolderPath := "/" + project.Name
+			var orgFolder models.MediaFolder
+			if err := database.DB.Where("path = ?", orgFolderPath).First(&orgFolder).Error; err != nil {
+				orgFolder = models.MediaFolder{
+					Name:      project.Name,
+					Path:      orgFolderPath,
+					CreatedBy: userID,
+					ProjectID: projectID,
+				}
+				database.DB.Create(&orgFolder)
+			}
+			if folder == "" {
+				folder = orgFolderPath
+			}
+		}
+	}
+
 	mediaFile := models.MediaFile{
 		FileName:   file.Filename,
 		URL:        url,
@@ -67,6 +91,7 @@ func UploadMediaHandler(c *fiber.Ctx) error {
 		Alt:        alt,
 		Caption:    caption,
 		UploadedBy: userID,
+		ProjectID:  projectID,
 	}
 
 	if strings.HasPrefix(mediaFile.Type, "image/") {
@@ -94,6 +119,16 @@ func UploadMediaHandler(c *fiber.Ctx) error {
 func BulkUploadMediaHandler(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uint)
 	folder := c.FormValue("folder", "")
+	var projectID *uint
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		projectID = &pid
+	}
+	if projectID != nil && folder == "" {
+		var project models.Project
+		if err := database.DB.First(&project, *projectID).Error; err == nil {
+			folder = "/" + project.Name
+		}
+	}
 
 	form, err := c.MultipartForm()
 	if err != nil {
@@ -137,6 +172,7 @@ func BulkUploadMediaHandler(c *fiber.Ctx) error {
 			Size:       file.Size,
 			Folder:     folder,
 			UploadedBy: userID,
+			ProjectID:  projectID,
 		}
 
 		if strings.HasPrefix(mediaFile.Type, "image/") {
@@ -191,6 +227,10 @@ func ListMediaHandler(c *fiber.Ctx) error {
 	var total int64
 
 	query := database.DB.Model(&models.MediaFile{})
+
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		query = query.Where("project_id = ?", pid)
+	}
 
 	if mediaType != "" {
 		query = query.Where("type LIKE ?", mediaType+"%")
@@ -306,6 +346,9 @@ func SearchMediaHandler(c *fiber.Ctx) error {
 	dbQuery := database.DB.Model(&models.MediaFile{}).
 		Where("file_name LIKE ? OR alt LIKE ? OR caption LIKE ?",
 			"%"+query+"%", "%"+query+"%", "%"+query+"%")
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		dbQuery = dbQuery.Where("project_id = ?", pid)
+	}
 
 	dbQuery.Count(&total)
 	dbQuery.Preload("Uploader").
@@ -375,6 +418,10 @@ func GetMediaStatsHandler(c *fiber.Ctx) error {
 
 func CreateFolderHandler(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uint)
+	var projectID *uint
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		projectID = &pid
+	}
 
 	var body struct {
 		Name     string `json:"name"`
@@ -405,6 +452,7 @@ func CreateFolderHandler(c *fiber.Ctx) error {
 		Path:      path,
 		ParentID:  body.ParentID,
 		CreatedBy: userID,
+		ProjectID: projectID,
 	}
 
 	if err := database.DB.Create(&folder).Error; err != nil {
@@ -416,7 +464,11 @@ func CreateFolderHandler(c *fiber.Ctx) error {
 
 func ListFoldersHandler(c *fiber.Ctx) error {
 	var folders []models.MediaFolder
-	if err := database.DB.Preload("Parent").Order("path").Find(&folders).Error; err != nil {
+	query := database.DB.Preload("Parent").Order("path")
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		query = query.Where("project_id = ?", pid)
+	}
+	if err := query.Find(&folders).Error; err != nil {
 		return response.InternalError(c, "Failed to fetch folders")
 	}
 

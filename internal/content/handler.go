@@ -479,9 +479,14 @@ func CreateRelationHandler(c *fiber.Ctx) error {
 		})
 	}
 
-	relation, err := CreateContentRelation(uint(fromID), body.ToContentID, body.RelationType)
+	var projectID *uint
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		projectID = &pid
+	}
+
+	relation, err := CreateContentRelation(uint(fromID), body.ToContentID, body.RelationType, projectID)
 	if err != nil {
-		return response.InternalError(c, "Failed to create relation")
+		return response.InternalError(c, "Failed to create relation: "+err.Error())
 	}
 
 	return response.Created(c, relation, "Relation created successfully")
@@ -493,7 +498,12 @@ func ListRelationsHandler(c *fiber.Ctx) error {
 		return response.BadRequest(c, "Invalid from_content_id", nil)
 	}
 
-	relations, err := ListContentRelations(uint(fromID))
+	var projectID *uint
+	if pid, ok := c.Locals("project_id").(uint); ok && pid > 0 {
+		projectID = &pid
+	}
+
+	relations, err := ListContentRelations(uint(fromID), projectID)
 	if err != nil {
 		return response.InternalError(c, "Failed to fetch relations")
 	}
@@ -815,7 +825,15 @@ func GetEntryHandler(c *fiber.Ctx) error {
 		return response.NotFound(c, "Entry")
 	}
 
-	return response.Success(c, entry, "Entry retrieved successfully")
+	canAssign := entry.Status == models.StatusDraft || entry.Status == models.StatusRejected
+
+	// Create a map to combine the original entry and the new field
+	entryMap := make(map[string]interface{})
+	entryJSON, _ := json.Marshal(entry)
+	json.Unmarshal(entryJSON, &entryMap)
+	entryMap["can_assign"] = canAssign
+
+	return response.Success(c, entryMap, "Entry retrieved successfully")
 }
 
 func DeleteEntryHandler(c *fiber.Ctx) error {

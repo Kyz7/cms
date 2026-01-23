@@ -136,6 +136,8 @@ func PermissionProtected(module string, action string) fiber.Handler {
 				currentModule = string(ProjectContentModule)
 			} else if module == "ContentType" || module == "ContentField" {
 				currentModule = string(ProjectSchemaModule)
+			} else if module == string(MediaModule) {
+				currentModule = "ProjectMedia"
 			}
 		}
 		c.Locals("module", currentModule)
@@ -158,6 +160,9 @@ func PermissionProtected(module string, action string) fiber.Handler {
 
 		if projectID == 0 {
 			// A. KONTEKS GLOBAL
+			if isContentWriter(&user) && module == "ContentType" && action == "create" {
+				return response.Forbidden(c, "Content writer cannot create content types")
+			}
 			hasPermission = HasGlobalPermission(userID, currentModule, action)
 		} else {
 			// B. KONTEKS PROYEK
@@ -168,12 +173,15 @@ func PermissionProtected(module string, action string) fiber.Handler {
 			}
 
 			// 4.2 Prioritas 2: Peran Global Fallback (misalnya Global Schema Editor)
-			if !hasPermission && (currentModule == string(ProjectSchemaModule) || currentModule == string(ProjectContentModule)) {
-				// Cek apakah user memiliki izin Global yang setara (misalnya ContentType:read)
+			if !hasPermission && (isContentWriter(&user) || (user.Role != nil && user.Role.Name == "editor")) &&
+				(currentModule == string(ProjectSchemaModule) || currentModule == string(ProjectContentModule)) {
 				globalEquivalentModule := strings.TrimPrefix(currentModule, "Project")
 				if HasGlobalPermission(userID, globalEquivalentModule, action) {
 					hasPermission = true
 				}
+			}
+			if isContentWriter(&user) && currentModule == string(ProjectSchemaModule) && action == "create" {
+				return response.Forbidden(c, "Content writer cannot create content types")
 			}
 		}
 
@@ -213,7 +221,22 @@ func CheckProjectPermissionByModuleAction(projectID, userID uint, module, action
 
 	log.Printf("DEBUG PERM: Project Check Result: RoleID %d, M:%s, A:%s, Count: %d", member.RoleID, module, action, count)
 
-	return count > 0 // Jika count > 0, izin ditemukan
+	if count > 0 {
+		return true
+	}
+
+	// Fallback: Beri akses Skema Proyek untuk ProjectAdmin/ProjectOwner meskipun permission belum lengkap
+	if module == "ProjectSchema" {
+		var role models.Role
+		if err := database.DB.First(&role, member.RoleID).Error; err == nil {
+			if role.Name == models.ProjectRoleAdmin || role.Name == models.ProjectRoleOwner {
+				log.Printf("DEBUG PERM: Fallback allow - %s can %s on ProjectSchema", role.Name, action)
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func HasPermission(userID uint, module, action string) bool {
@@ -672,6 +695,30 @@ func GetAccessibleProjectIDs(userID uint, module, action string) []uint {
     `, userID, module, action).Scan(&accessibleProjects)
 
 	return accessibleProjects
+}
+
+// HasAnyProjectRole checks if user has any project role (ProjectViewer, ProjectEditor, ProjectAdmin, ProjectOwner)
+func HasAnyProjectRole(userID uint) bool {
+	var count int64
+	database.DB.Raw(`
+		SELECT COUNT(DISTINCT pm.id)
+		FROM project_members pm
+		JOIN roles r ON r.id = pm.role_id
+		WHERE pm.user_id = ? 
+		AND pm.status = 'active'
+		AND r.is_global = FALSE
+		AND r.name IN (?, ?, ?, ?)
+	`, userID, models.ProjectRoleViewer, models.ProjectRoleEditor, models.ProjectRoleAdmin, models.ProjectRoleOwner).Scan(&count)
+
+	return count > 0
+}
+
+// isContentWriter checks if user has content_writer role
+func isContentWriter(user *models.User) bool {
+	if user.Role == nil {
+		return false
+	}
+	return user.Role.Name == "content_writer"
 }
 
 type Module string
