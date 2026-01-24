@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -149,6 +150,12 @@ func GoogleCallback(c *fiber.Ctx) error {
 		} else {
 			return c.Status(500).JSON(fiber.Map{"error": "database error"})
 		}
+	} else {
+		// Update provider to "google" for existing users logging in via Google
+		if u.Provider != "google" {
+			u.Provider = "google"
+			database.DB.Save(&u)
+		}
 	}
 
 	if err := database.DB.Preload("Role").First(&u, u.ID).Error; err != nil {
@@ -164,10 +171,11 @@ func GoogleCallback(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": "failed to generate refresh token"})
 	}
 
-	// Return proper AuthPayload format
-	return c.JSON(fiber.Map{
-		"token":        accessToken,
-		"refreshToken": refreshToken,
-		"user":         u,
-	})
+	// Redirect to frontend with tokens
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = "http://localhost:3000"
+	}
+
+	return c.Redirect(fmt.Sprintf("%s/auth/google/callback?token=%s&refreshToken=%s", frontendURL, accessToken, refreshToken))
 }
