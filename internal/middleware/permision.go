@@ -229,9 +229,24 @@ func CheckProjectPermissionByModuleAction(projectID, userID uint, module, action
 	if module == "ProjectSchema" || module == "ProjectMedia" || module == "ProjectContent" {
 		var role models.Role
 		if err := database.DB.First(&role, member.RoleID).Error; err == nil {
+			// Admin dan Owner: akses penuh untuk module project
 			if role.Name == models.ProjectRoleAdmin || role.Name == models.ProjectRoleOwner {
 				log.Printf("DEBUG PERM: Fallback allow - %s can %s on %s", role.Name, action, module)
 				return true
+			}
+			// Editor: izinkan create/read/update pada ProjectContent
+			if module == "ProjectContent" && role.Name == models.ProjectRoleEditor {
+				if action == "create" || action == "read" || action == "update" {
+					log.Printf("DEBUG PERM: Fallback allow - editor can %s on %s", action, module)
+					return true
+				}
+			}
+			// Content Writer: izinkan create/read/update pada ProjectContent
+			if module == "ProjectContent" && role.Name == models.ProjectRoleContentWriter {
+				if action == "create" || action == "read" || action == "update" {
+					log.Printf("DEBUG PERM: Fallback allow - content_writer can %s on %s", action, module)
+					return true
+				}
 			}
 		}
 	}

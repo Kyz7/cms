@@ -3,6 +3,7 @@ package project
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/Kyz7/cms/internal/database"
 	"github.com/Kyz7/cms/internal/globals"
@@ -370,42 +371,43 @@ func ListProjectMembers(projectID uint) ([]models.ProjectMember, error) {
 
 func HasProjectPermission(projectID, userID uint, requiredRoleName string) bool {
 
-	// 1. Ambil Anggota Proyek dan Muat Peran (Role)
 	var member models.ProjectMember
-	// Kita harus Preload("Role") agar member.Role.Name dapat diakses
 	err := database.DB.
 		Preload("Role").
 		Where("project_id = ? AND user_id = ? AND status = ?", projectID, userID, "active").
 		First(&member).Error
 
 	if err != nil {
-		// Jika anggota tidak ditemukan atau error DB
 		return false
 	}
 
-	// Pastikan Role dimuat dan tidak nil
-	if member.Role == nil {
+	roleName := ""
+	if member.Role != nil {
+		roleName = member.Role.Name
+	} else {
+		var role models.Role
+		if err := database.DB.First(&role, member.RoleID).Error; err == nil {
+			roleName = role.Name
+		}
+	}
+	if roleName == "" {
 		return false
 	}
 
-	// 2. Definisikan Hierarki (menggunakan Nama Peran)
 	roleHierarchy := map[string]int{
-		models.ProjectRoleViewer: 1,
-		models.ProjectRoleEditor: 2,
-		models.ProjectRoleAdmin:  3,
-		models.ProjectRoleOwner:  4,
+		strings.ToLower(models.ProjectRoleViewer): 1,
+		strings.ToLower(models.ProjectRoleEditor): 2,
+		strings.ToLower(models.ProjectRoleAdmin):  3,
+		strings.ToLower(models.ProjectRoleOwner):  4,
 	}
 
-	// 3. Ambil Level Anggota (menggunakan member.Role.Name)
-	memberLevel, memberOk := roleHierarchy[member.Role.Name] // <-- PERBAIKAN: Menggunakan member.Role.Name
-	requiredLevel, requiredOk := roleHierarchy[requiredRoleName]
+	memberLevel, memberOk := roleHierarchy[strings.ToLower(strings.TrimSpace(roleName))]
+	requiredLevel, requiredOk := roleHierarchy[strings.ToLower(strings.TrimSpace(requiredRoleName))]
 
 	if !memberOk || !requiredOk {
-		// Jika salah satu peran tidak ada dalam hierarki yang ditentukan
 		return false
 	}
 
-	// 4. Perbandingan Hierarki
 	return memberLevel >= requiredLevel
 }
 

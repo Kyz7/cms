@@ -94,7 +94,7 @@ func UpdateProjectHandler(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uint)
 
 	// Check if user has permission (owner or admin)
-	if !HasProjectPermission(uint(projectID), userID, "admin") {
+	if !HasProjectPermission(uint(projectID), userID, models.ProjectRoleAdmin) {
 		return response.Forbidden(c, "Only project owners and admins can update project")
 	}
 
@@ -120,8 +120,8 @@ func DeleteProjectHandler(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uint)
 
 	// Check if user is owner
-	if !HasProjectPermission(uint(projectID), userID, "owner") {
-		return response.Forbidden(c, "Only project owner can delete project")
+	if !HasProjectPermission(uint(projectID), userID, models.ProjectRoleAdmin) {
+		return response.Forbidden(c, "Only project owners and admins can delete project")
 	}
 
 	if err := DeleteProject(uint(projectID)); err != nil {

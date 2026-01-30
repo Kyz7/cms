@@ -710,7 +710,7 @@ func UpdateEntryHandler(c *fiber.Ctx) error {
 	}
 
 	if len(filteredData) == 0 {
-		return response.BadRequest(c, "No valid fields to update. All provided fields were filtered out by permissions or don't exist", nil)
+		return response.Forbidden(c, "No valid fields to update. All provided fields were filtered out by permissions or don't exist")
 	}
 
 	// --- 3. Tambahkan kembali media_id yang lolos filter ---

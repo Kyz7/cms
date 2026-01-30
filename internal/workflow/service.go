@@ -83,6 +83,8 @@ func mapProjectRoleToWorkflowRole(projectRole string) string {
 		return "admin"
 	case models.ProjectRoleEditor:
 		return "editor"
+	case models.ProjectRoleContentWriter:
+		return "content_writer"
 	case models.ProjectRoleViewer:
 		return "viewer"
 	default:
@@ -108,7 +110,7 @@ func isValidTransition(fromStatus, toStatus models.WorkflowStatus, userRole stri
 			models.StatusPublished: {"manager", "admin"},
 		},
 		models.StatusRejected: {
-			models.StatusDraft: {"editor", "admin"},
+			models.StatusDraft: {"content_writer", "editor", "admin"},
 		},
 	}
 
@@ -169,7 +171,6 @@ func GetWorkflowComments(entryID uint, includePrivate bool) ([]models.WorkflowCo
 }
 
 func AssignEntry(entryID, assignedTo, assignedBy uint, dueDate *time.Time, autoTransitionToDraft bool) (*models.WorkflowAssignment, error) {
-	// 1. Check entry status
 	var entry models.ContentEntry
 	if err := database.DB.First(&entry, entryID).Error; err != nil {
 		return nil, fmt.Errorf("entry not found")
@@ -179,7 +180,6 @@ func AssignEntry(entryID, assignedTo, assignedBy uint, dueDate *time.Time, autoT
 		return nil, fmt.Errorf("assignment can only be created when entry is in Draft or Rejected status (current: %s)", entry.Status)
 	}
 
-	// 1b. Prevent duplicate pending assignment for the same entry
 	{
 		var existing models.WorkflowAssignment
 		if err := database.DB.Where("entry_id = ? AND status = ?", entryID, "pending").First(&existing).Error; err == nil {
@@ -187,7 +187,27 @@ func AssignEntry(entryID, assignedTo, assignedBy uint, dueDate *time.Time, autoT
 		}
 	}
 
-	// 2. Check assignee role
+	var assigner models.User
+	if err := database.DB.Preload("Role").First(&assigner, assignedBy).Error; err != nil {
+		return nil, fmt.Errorf("assigner user not found")
+	}
+	{
+		allowed := false
+		if entry.ProjectID != nil {
+			projectRole, err := project.GetUserProjectRole(*entry.ProjectID, assignedBy)
+			if err == nil && (projectRole == models.ProjectRoleEditor || projectRole == models.ProjectRoleAdmin) {
+				allowed = true
+			}
+		} else {
+			if assigner.Role != nil && (assigner.Role.Name == "editor" || assigner.Role.Name == "admin") {
+				allowed = true
+			}
+		}
+		if !allowed {
+			return nil, fmt.Errorf("only admin/editor or project editor/admin can create assignments")
+		}
+	}
+
 	var assignee models.User
 	if err := database.DB.Preload("Role").First(&assignee, assignedTo).Error; err != nil {
 		return nil, fmt.Errorf("assignee user not found")
