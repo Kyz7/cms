@@ -22,9 +22,9 @@ func init() {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		jwtKey = []byte(secret)
-		return
+	} else {
+		jwtKey = []byte(secret)
 	}
-
 }
 
 func ValidateJWTSecret() error {
@@ -33,6 +33,10 @@ func ValidateJWTSecret() error {
 	if secret == "" {
 		return fmt.Errorf("JWT_SECRET environment variable is required")
 	}
+
+	// Ensure jwtKey is synchronized with the validated secret
+	// This fixes issues where init() might have run before .env was loaded
+	jwtKey = []byte(secret)
 
 	if len(secret) < 32 {
 		return fmt.Errorf("JWT_SECRET must be at least 32 characters long (current: %d)", len(secret))
@@ -58,14 +62,23 @@ func GenerateJWT(userID uint, roleName string) (string, error) {
 
 func ParseJWT(tokenStr string) (uint, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
+		if len(jwtKey) == 0 {
+			return nil, fmt.Errorf("jwtKey is empty")
+		}
 		return jwtKey, nil
 	})
-	if err != nil || !token.Valid {
+	if err != nil {
+		fmt.Printf("DEBUG: ParseJWT validation failed: %v\n", err)
 		return 0, err
+	}
+	if !token.Valid {
+		fmt.Println("DEBUG: ParseJWT token invalid")
+		return 0, fmt.Errorf("invalid token")
 	}
 
 	claims, ok := token.Claims.(*jwt.RegisteredClaims)
 	if !ok {
+		fmt.Println("DEBUG: ParseJWT claims type mismatch")
 		return 0, fmt.Errorf("invalid token claims")
 	}
 

@@ -141,17 +141,29 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	}), auth.RefreshHandler)
 	authGroup.Get("/me", auth.JWTProtected(), auth.MeHandler)
 	authGroup.Post("/logout", auth.JWTProtected(), auth.LogoutHandler)
+	authGroup.Put("/me", auth.JWTProtected(), auth.UpdateMeHandler)
 	// ==========================================
-	// USER MANAGEMENT (Admin only)
+	// USER MANAGEMENT
 	// ==========================================
 	userGroup := app.Group("/users")
 	userGroup.Use(auth.JWTProtected())
-	userGroup.Use(auth.RoleProtected("admin"))
-	userGroup.Post("/", user.CreateUserHandler)
-	userGroup.Get("/", user.ListUsersHandler)
-	userGroup.Get("/:id", user.GetUserHandler)
-	userGroup.Put("/:id", user.UpdateUserHandler)
-	userGroup.Delete("/:id", user.DeleteUserHandler)
+	// Admin-only endpoints
+	userGroup.Post("/",
+		auth.RoleProtected("admin"),
+		user.CreateUserHandler)
+	userGroup.Get("/",
+		auth.RoleProtected("admin"),
+		user.ListUsersHandler)
+	userGroup.Get("/:id",
+		auth.RoleProtected("admin"),
+		user.GetUserHandler)
+	userGroup.Delete("/:id",
+		auth.RoleProtected("admin"),
+		user.DeleteUserHandler)
+	// Self update or admin update
+	userGroup.Put("/:id",
+		// Only JWT required; UpdateUserHandler enforces admin vs self
+		user.UpdateUserHandler)
 
 	// ==========================================
 	// ROLE MANAGEMENT (Admin only)

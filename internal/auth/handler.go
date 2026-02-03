@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/smtp"
+	"net/url"
 	"os"
 	"regexp"
 	"time"
@@ -238,7 +239,7 @@ func ForgotPasswordHandler(c *fiber.Ctx) error {
 
 	var user models.User
 	if err := database.DB.Where("email = ?", body.Email).First(&user).Error; err != nil {
-		return response.Success(c, nil, "If account exists, reset link has been sent")
+		return response.NotFound(c, "Email not found")
 	}
 
 	plainToken, tokenHash, err := generateSecureToken(32)
@@ -256,7 +257,12 @@ func ForgotPasswordHandler(c *fiber.Ctx) error {
 		return response.InternalError(c, "Failed to save reset token")
 	}
 
-	resetURL := fmt.Sprintf("%s/reset-password?token=%s", os.Getenv("FRONTEND_URL"), plainToken)
+	baseURL := os.Getenv("BASE_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:3000" // Fallback default
+	}
+
+	resetURL := fmt.Sprintf("%s/auth/new-password?token=%s", baseURL, url.QueryEscape(plainToken))
 	smtpHost := os.Getenv("SMTP_HOST")
 	smtpPort := os.Getenv("SMTP_PORT")
 	smtpUser := os.Getenv("SMTP_USER")
@@ -266,7 +272,7 @@ func ForgotPasswordHandler(c *fiber.Ctx) error {
 	if smtpHost == "" || smtpPort == "" || smtpUser == "" || smtpPassword == "" {
 		// Log error but don't expose to user
 		log.Printf("SMTP configuration missing, cannot send reset email")
-		return response.Success(c, nil, "If account exists, reset link has been sent")
+		return response.InternalError(c, "SMTP configuration missing")
 	}
 
 	if smtpFrom == "" {
@@ -352,6 +358,74 @@ func MeHandler(c *fiber.Ctx) error {
 	}
 	u.Password = ""
 	return response.Success(c, u, "Current user retrieved")
+}
+
+// UpdateMeHandler allows authenticated users to update their own profile (name, email, password)
+func UpdateMeHandler(c *fiber.Ctx) error {
+	userIDInterface := c.Locals("user_id")
+	if userIDInterface == nil {
+		return response.Unauthorized(c, "User not authenticated")
+	}
+	userID, ok := userIDInterface.(uint)
+	if !ok {
+		return response.InternalError(c, "Invalid user ID format")
+	}
+
+	var body struct {
+		Name     string `json:"name"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return response.BadRequest(c, "Invalid request body", err.Error())
+	}
+
+	var user models.User
+	if err := database.DB.First(&user, userID).Error; err != nil {
+		return response.NotFound(c, "User")
+	}
+
+	if body.Email != "" && !isValidEmail(body.Email) {
+		return response.ValidationError(c, map[string]string{
+			"email": "invalid email format",
+		})
+	}
+
+	// Update Email (ensure not taken by others)
+	if body.Email != "" && body.Email != user.Email {
+		var existing models.User
+		if err := database.DB.Where("email = ? AND id != ?", body.Email, userID).First(&existing).Error; err == nil {
+			return response.Conflict(c, "Email already taken")
+		}
+		user.Email = body.Email
+	}
+
+	// Update Name
+	if body.Name != "" {
+		user.Name = body.Name
+	}
+
+	// Update Password if provided
+	if body.Password != "" {
+		if err := validatePasswordStrength(body.Password); err != nil {
+			return response.ValidationError(c, map[string]string{
+				"password": err.Error(),
+			})
+		}
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(body.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return response.InternalError(c, "Failed to hash password")
+		}
+		user.Password = string(hashedPassword)
+	}
+
+	if err := database.DB.Save(&user).Error; err != nil {
+		return response.InternalError(c, "Failed to update user")
+	}
+
+	database.DB.Preload("Role.Permissions").First(&user, user.ID)
+	user.Password = ""
+	return response.Success(c, user, "Profile updated successfully")
 }
 func generateSecureToken(n int) (string, string, error) {
 	b := make([]byte, n)

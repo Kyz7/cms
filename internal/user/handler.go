@@ -159,6 +159,20 @@ func UpdateUserHandler(c *fiber.Ctx) error {
 	if err != nil {
 		return response.BadRequest(c, "Invalid user ID", nil)
 	}
+	currentUserIDRaw := c.Locals("user_id")
+	if currentUserIDRaw == nil {
+		return response.Unauthorized(c, "User not authenticated")
+	}
+	currentUserID, ok := currentUserIDRaw.(uint)
+	if !ok {
+		return response.Unauthorized(c, "Invalid user context")
+	}
+	// Load current user to check role
+	var currentUser models.User
+	if err := database.DB.Preload("Role").First(&currentUser, currentUserID).Error; err != nil {
+		return response.Unauthorized(c, "User not found")
+	}
+	isAdmin := (currentUser.Role != nil && currentUser.Role.Name == "admin")
 
 	var body struct {
 		Name     string `json:"name"`
@@ -174,6 +188,10 @@ func UpdateUserHandler(c *fiber.Ctx) error {
 	var user models.User
 	if err := database.DB.First(&user, id).Error; err != nil {
 		return response.NotFound(c, "User")
+	}
+	// Permission: allow admin or self
+	if !isAdmin && currentUserID != uint(id) {
+		return response.Forbidden(c, "Only admin can update other users")
 	}
 
 	if body.Email != "" && !isValidEmail(body.Email) {
@@ -196,8 +214,8 @@ func UpdateUserHandler(c *fiber.Ctx) error {
 		user.Name = body.Name
 	}
 
-	// 3. Validasi dan Update Role Global
-	if body.RoleID != 0 {
+	// 3. Validasi dan Update Role Global (hanya admin)
+	if isAdmin && body.RoleID != 0 {
 		var role models.Role
 		// Cari Role berdasarkan ID DAN pastikan is_global = TRUE
 		if err := database.DB.Where("is_global = ?", true).First(&role, body.RoleID).Error; err != nil {
