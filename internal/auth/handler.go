@@ -257,12 +257,12 @@ func ForgotPasswordHandler(c *fiber.Ctx) error {
 		return response.InternalError(c, "Failed to save reset token")
 	}
 
-	baseURL := os.Getenv("BASE_URL")
-	if baseURL == "" {
-		baseURL = "http://localhost:3000" // Fallback default
+	FRONTEND_URL := os.Getenv("FRONTEND_URL")
+	if FRONTEND_URL == "" {
+		FRONTEND_URL = "http://localhost:3000" // Fallback default
 	}
 
-	resetURL := fmt.Sprintf("%s/auth/new-password?token=%s", baseURL, url.QueryEscape(plainToken))
+	resetURL := fmt.Sprintf("%s/auth/new-password?token=%s", FRONTEND_URL, url.QueryEscape(plainToken))
 	smtpHost := os.Getenv("SMTP_HOST")
 	smtpPort := os.Getenv("SMTP_PORT")
 	smtpUser := os.Getenv("SMTP_USER")

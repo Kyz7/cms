@@ -65,24 +65,31 @@ func main() {
 	}
 	log.Println("✅ Local storage initialized at ./uploads/")
 
-	useS3 := os.Getenv("USE_S3")
-	if useS3 == "true" {
-		s3Bucket := os.Getenv("S3_BUCKET")
-		s3Region := os.Getenv("S3_REGION")
-		cloudfrontURL := os.Getenv("CLOUDFRONT_URL")
+	useSupabase := os.Getenv("USE_SUPABASE")
 
-		if s3Bucket != "" && s3Region != "" {
-			if err := utils.InitS3(s3Bucket, s3Region, cloudfrontURL); err != nil {
-				log.Println("⚠️  S3 initialization failed:", err)
-				log.Println("⚠️  Falling back to local storage")
-				utils.SetStorageMode(true)
-			} else {
-				log.Println("✅ S3 initialized successfully")
-				log.Printf("☁️  Using S3: %s (region: %s)", s3Bucket, s3Region)
+	if useSupabase == "true" {
+		params := []string{
+			os.Getenv("SUPABASE_URL"),
+			os.Getenv("SUPABASE_KEY"),
+			os.Getenv("SUPABASE_BUCKET"),
+		}
+
+		valid := true
+		for _, p := range params {
+			if p == "" {
+				valid = false
+				break
 			}
+		}
+
+		if valid {
+			utils.InitSupabase(params[0], params[1], params[2])
+			log.Println("✅ Supabase storage initialized")
+			log.Printf("☁️  Using Supabase: %s", params[2])
 		} else {
-			log.Println("⚠️  USE_S3=true but S3_BUCKET or S3_REGION not configured")
+			log.Println("⚠️  USE_SUPABASE=true but missing configuration")
 			log.Println("⚠️  Falling back to local storage")
+			utils.SetStorageMode(true)
 		}
 	} else {
 		log.Println("💾 Using LOCAL storage mode (./uploads/)")
