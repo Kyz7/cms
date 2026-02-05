@@ -48,10 +48,11 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	app.Use(csrf.New(csrf.Config{
 		KeyLookup:      "header:X-CSRF-Token",
 		CookieName:     "csrf_",
-		CookieSameSite: "Lax",
+		CookieSameSite: "None", // Required for cross-site cookies
 		CookieHTTPOnly: true,
-		CookieSecure:   os.Getenv("APP_ENV") == "production",
+		CookieSecure:   true, // Must be true for SameSite=None
 		Expiration:     1 * time.Hour,
+		ContextKey:     "csrf",
 		Next: func(c *fiber.Ctx) bool {
 			path := c.Path()
 			if path == "/health" || strings.HasPrefix(path, "/swagger") || path == "/openapi.yaml" {
@@ -84,11 +85,18 @@ func SetupRoutes(app *fiber.App, db *gorm.DB) {
 	app.Get("/csrf-token", func(c *fiber.Ctx) error {
 		token, ok := c.Locals("csrf").(string)
 		if !ok {
-			token = c.GetRespHeader("X-CSRF-Token")
+			// Try to get it from response header if already set by middleware
+			respToken := c.GetRespHeader("X-CSRF-Token")
+			if respToken != "" {
+				token = respToken
+			}
 		}
 
 		if token == "" {
-			return c.Status(500).JSON(fiber.Map{"error": "Check middleware order"})
+			return c.Status(500).JSON(fiber.Map{
+				"error":   "CSRF token generation failed",
+				"details": "Ensure middleware is properly configured",
+			})
 		}
 
 		return c.JSON(fiber.Map{"csrf_token": token})
