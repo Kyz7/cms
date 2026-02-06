@@ -20,11 +20,14 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 		sslMode = "disable"
 	}
 	dsn := fmt.Sprintf(
-		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
-		cfg.DBHost, cfg.DBUser, cfg.DBPassword, cfg.DBName, cfg.DBPort,
+		"host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",
+		cfg.DBHost, cfg.DBUser, cfg.DBPassword, cfg.DBName, cfg.DBPort, sslMode,
 	)
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(postgres.New(postgres.Config{
+		DSN:                  dsn,
+		PreferSimpleProtocol: true,
+	}), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}
@@ -40,24 +43,24 @@ func Migrate(db *gorm.DB) error {
 		log.Fatal("failed to create enum:", err)
 	}
 	err := db.AutoMigrate(
-		&models.User{},
-		&models.Role{},
-		&models.Permission{},
-		&models.Project{},
-		&models.ProjectMember{},
-		&models.ContentType{},
-		&models.ContentField{},
-		&models.ContentEntry{},
-		&models.ContentRelation{},
-		&models.PasswordResetToken{},
-		&models.ResetToken{},
-		&models.RefreshToken{},
-		&models.WorkflowTransition{},
-		&models.WorkflowHistory{},
-		&models.WorkflowComment{},
-		&models.WorkflowAssignment{},
-		&models.MediaFile{},
-		&models.MediaFolder{},
+	// &models.User{},
+	// &models.Role{},
+	// &models.Permission{},
+	// &models.Project{},
+	// &models.ProjectMember{},
+	// &models.ContentType{},
+	// &models.ContentField{},
+	// &models.ContentEntry{},
+	// &models.ContentRelation{},
+	// &models.PasswordResetToken{},
+	// &models.ResetToken{},
+	// &models.RefreshToken{},
+	// &models.WorkflowTransition{},
+	// &models.WorkflowHistory{},
+	// &models.WorkflowComment{},
+	// &models.WorkflowAssignment{},
+	// &models.MediaFile{},
+	// &models.MediaFolder{},
 	)
 	if err != nil {
 		log.Fatal("Failed to migrate database: ", err)

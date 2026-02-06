@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"os" // Added import
+
 	"github.com/Kyz7/cms/internal/database"
 	"github.com/Kyz7/cms/internal/models"
 	"github.com/Kyz7/cms/internal/server"
@@ -47,12 +49,17 @@ func TestDB(t *testing.T) *gorm.DB {
 }
 
 func SetupTestApp(t *testing.T) *fiber.App {
+	// Set JWT secret for tests
+	os.Setenv("JWT_SECRET", "this_is_a_test_secret_that_is_at_least_32_characters_long")
+	err := utils.ValidateJWTSecret()
+	assert.NoError(t, err, "Failed to validate JWT secret")
+
 	db := TestDB(t)
 	database.DB = db
 
 	CreateTestRoles(t, db)
 
-	err := utils.InitLocalStorage()
+	err = utils.InitLocalStorage()
 	assert.NoError(t, err, "Failed to initialize storage")
 	utils.SetStorageMode(true) //
 
