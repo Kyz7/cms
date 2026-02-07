@@ -103,9 +103,13 @@ func PermissionProtected(module string, action string) fiber.Handler {
 			}
 		}
 
-		// C. Deteksi ProjectID dari Entry ID di URL (jika projectID masih 0)
+		// C. Deteksi ProjectID dari Entry ID atau from_content_id di URL (jika projectID masih 0)
 		if projectID == 0 {
 			entryIDInt, err := c.ParamsInt("entry_id")
+			if err != nil {
+				entryIDInt, err = c.ParamsInt("from_content_id")
+			}
+
 			if err == nil && entryIDInt > 0 {
 				var entry models.ContentEntry
 				// Preload ContentType untuk mendapatkan ProjectID

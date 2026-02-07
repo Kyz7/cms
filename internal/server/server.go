@@ -7,7 +7,8 @@ import (
 
 func New(db *gorm.DB) *fiber.App {
 	app := fiber.New(fiber.Config{
-		BodyLimit: 100 * 1024 * 1024,
+		BodyLimit:   100 * 1024 * 1024,
+		ProxyHeader: "X-Forwarded-For",
 	})
 
 	app.Static("/uploads", "./uploads", fiber.Static{
