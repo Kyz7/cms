@@ -237,14 +237,20 @@ func ForgotPasswordHandler(c *fiber.Ctx) error {
 		})
 	}
 
+	// Always return success message for security to prevent email enumeration
+	successResponse := func() error {
+		return response.Success(c, nil, "If account exists, reset link has been sent")
+	}
+
 	var user models.User
 	if err := database.DB.Where("email = ?", body.Email).First(&user).Error; err != nil {
-		return response.NotFound(c, "Email not found")
+		return successResponse()
 	}
 
 	plainToken, tokenHash, err := generateSecureToken(32)
 	if err != nil {
-		return response.InternalError(c, "Failed to generate reset token")
+		log.Printf("Failed to generate reset token: %v", err)
+		return successResponse()
 	}
 
 	reset := models.ResetToken{
@@ -254,7 +260,8 @@ func ForgotPasswordHandler(c *fiber.Ctx) error {
 	}
 
 	if err := database.DB.Create(&reset).Error; err != nil {
-		return response.InternalError(c, "Failed to save reset token")
+		log.Printf("Failed to save reset token: %v", err)
+		return successResponse()
 	}
 
 	FRONTEND_URL := os.Getenv("FRONTEND_URL")
@@ -270,30 +277,32 @@ func ForgotPasswordHandler(c *fiber.Ctx) error {
 	smtpFrom := os.Getenv("SMTP_FROM")
 
 	if smtpHost == "" || smtpPort == "" || smtpUser == "" || smtpPassword == "" {
-		// Log error but don't expose to user
+		// Log error but don't expose to user or break security
 		log.Printf("SMTP configuration missing, cannot send reset email")
-		return response.InternalError(c, "SMTP configuration missing")
+		return successResponse()
 	}
 
 	if smtpFrom == "" {
 		smtpFrom = smtpUser
 	}
 
-	msg := fmt.Sprintf("Subject: Password Reset\n\nClick here to reset: %s", resetURL)
+	// Send email in background to avoid blocking the response
+	go func() {
+		msg := fmt.Sprintf("From: %s\nTo: %s\nSubject: Password Reset\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\n\nClick here to reset your password: %s", smtpFrom, user.Email, resetURL)
 
-	sendEmail := smtp.SendMail(
-		fmt.Sprintf("%s:%s", smtpHost, smtpPort),
-		smtp.PlainAuth("", smtpUser, smtpPassword, smtpHost),
-		smtpFrom,
-		[]string{user.Email},
-		[]byte(msg),
-	)
+		err := smtp.SendMail(
+			fmt.Sprintf("%s:%s", smtpHost, smtpPort),
+			smtp.PlainAuth("", smtpUser, smtpPassword, smtpHost),
+			smtpFrom,
+			[]string{user.Email},
+			[]byte(msg),
+		)
+		if err != nil {
+			log.Printf("Failed to send reset email to %s: %v", user.Email, err)
+		}
+	}()
 
-	if sendEmail != nil {
-		log.Printf("Failed to send reset email: %v", err)
-	}
-
-	return response.Success(c, nil, "If account exists, reset link has been sent")
+	return successResponse()
 }
 
 func ResetPasswordHandler(c *fiber.Ctx) error {

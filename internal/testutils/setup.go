@@ -256,7 +256,9 @@ func AssertError(t *testing.T, resp *httptest.ResponseRecorder, expectedCode str
 	var result StandardResponse
 	ParseResponse(t, resp, &result)
 	assert.False(t, result.Success, "Expected error response")
-	assert.NotNil(t, result.Error, "Expected error object")
+	if !assert.NotNil(t, result.Error, "Expected error object") {
+		return
+	}
 	assert.Equal(t, expectedCode, result.Error.Code, "Error code mismatch")
 }
 
