@@ -338,9 +338,11 @@ func checkUniqueness(contentTypeID uint, fieldName string, value interface{}, ex
 	var count int64
 	jsonValue, _ := json.Marshal(value)
 
+	// Use raw SQL for JSONB comparison to ensure compatibility with PostgreSQL
+	// data->'field' = 'value'::jsonb
 	query := database.DB.Model(&models.ContentEntry{}).
 		Where("content_type_id = ?", contentTypeID).
-		Where("data->? = ?", fieldName, jsonValue)
+		Where(fmt.Sprintf("data->'%s' = ?::jsonb", fieldName), string(jsonValue))
 
 	if excludeEntryID != nil {
 		query = query.Where("id != ?", *excludeEntryID)
@@ -349,7 +351,7 @@ func checkUniqueness(contentTypeID uint, fieldName string, value interface{}, ex
 	err := query.Count(&count).Error
 
 	if err != nil {
-		return fmt.Errorf("failed to check uniqueness for field '%s'", fieldName)
+		return fmt.Errorf("failed to check uniqueness for field '%s': %w", fieldName, err)
 	}
 
 	if count > 0 {
